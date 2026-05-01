@@ -1,0 +1,10 @@
+[
+  {
+    "user_query": "Create a smart casual outfit for dinner.",
+    "use_owned_only": false
+  },
+  {
+    "user_query": "Use only my wardrobe for a rainy work day.",
+    "use_owned_only": true
+  }
+]
