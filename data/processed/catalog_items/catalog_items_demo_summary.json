@@ -1,0 +1,40 @@
+{
+  "source_catalog_csv": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\processed\\catalog_items\\catalog_items_mvp.csv",
+  "source_images_root": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\raw\\hm\\images",
+  "output_images_root": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\processed\\demo_images",
+  "row_count": 5000,
+  "unique_item_count": 5000,
+  "target_group_counts": {
+    "men": 5000
+  },
+  "role_counts": {
+    "top": 1694,
+    "bottom": 1694,
+    "outerwear": 1174,
+    "shoes": 438
+  },
+  "category_counts": {
+    "trousers": 1174,
+    "jacket": 608,
+    "shorts": 518,
+    "tshirt": 465,
+    "sweater": 454,
+    "shirt": 397,
+    "blazer": 285,
+    "sneakers": 276,
+    "hoodie": 188,
+    "cardigan": 131,
+    "coat": 118,
+    "boots": 107,
+    "polo_shirt": 87,
+    "tank_top": 58,
+    "sandals": 55,
+    "top": 45,
+    "waistcoat": 32,
+    "outdoor_trousers": 2
+  },
+  "copied_count": 0,
+  "missing_count": 0,
+  "missing_examples": [],
+  "image_copy_skipped": true
+}
