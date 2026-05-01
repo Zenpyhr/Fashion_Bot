@@ -10,9 +10,75 @@ Fashion_Bot is a fashion assistant with two main capabilities:
 The project uses `Vertex AI` as the model backend for:
 - text generation
 - embeddings
-- VLM-based image understanding
+- later VLM-based image understanding
 
 The goal is to keep both workstreams separate enough that two people can build in parallel with minimal overlap.
+
+## Local Setup
+
+Use a local virtual environment and a local `.env` file.
+
+Why:
+- each teammate gets an isolated Python environment
+- both teammates install the same project dependencies
+- secrets and machine-specific settings stay out of git
+
+### `.env.example`
+
+`.env.example` is a template file that shows which environment variables the project expects.
+
+Workflow:
+1. copy `.env.example` to `.env`
+2. fill in your real local values
+
+Example:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Important:
+- commit `.env.example`
+- do not commit `.env`
+
+### Virtual Environment
+
+Each teammate should create their own `.venv` locally.
+Do not copy the `.venv` folder from one machine to another.
+
+Recommended setup:
+
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Recommended project standard:
+- Python `3.11`
+- one `.venv` per teammate machine
+- install from the shared `requirements.txt`
+
+### Team Setup Checklist
+
+Every teammate should run:
+
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Then update `.env` with the right local values for:
+- `GOOGLE_CLOUD_PROJECT`
+- `GOOGLE_CLOUD_LOCATION`
+- `VERTEX_MODEL_TEXT`
+- `VERTEX_MODEL_VISION`
+- `EMBEDDING_MODEL`
+- `DATABASE_URL`
 
 ## Team Split
 
@@ -88,6 +154,7 @@ Build the actual outfit pipeline on top of structured metadata:
 - parse user request
 - turn request into constraints
 - retrieve candidate items
+- compose outfits
 - rank combinations
 - return top outfit suggestions
 
@@ -110,8 +177,6 @@ Expose both systems through one API or app:
 Later, recommendation explanations can optionally call the QA system for extra styling context.
 
 ## Proposed File Structure
-
-This structure keeps the two tracks separate while still sharing configuration and schemas.
 
 ```text
 Fashion_Bot/
@@ -137,8 +202,6 @@ Fashion_Bot/
 │       ├── sample_questions.json
 │       └── sample_user_queries.json
 ├── notebooks/
-│   ├── catalog_exploration.ipynb
-│   └── rag_exploration.ipynb
 ├── app/
 │   ├── main.py
 │   ├── routes/
@@ -176,6 +239,7 @@ Fashion_Bot/
 ├── tests/
 │   ├── test_rag.py
 │   ├── test_recommender.py
+│   ├── test_catalog_preprocessing.py
 │   └── test_api.py
 └── scripts/
     ├── run_api.py
@@ -199,7 +263,7 @@ Code used by both teammates:
 Wrappers for external services, especially `Vertex AI`.
 
 ### `src/rag/`
-Owned mainly by your teammate.
+Owned mainly by the Fashion News / QA track.
 
 Contains:
 - article ingestion
@@ -209,7 +273,7 @@ Contains:
 - grounded answer generation
 
 ### `src/recommender/`
-Owned mainly by you.
+Owned mainly by the recommendation track.
 
 Contains:
 - H&M ingestion
@@ -251,21 +315,39 @@ Output:
 - explanations
 - missing items
 
+## Current Recommender Data Status
+
+The current recommender preprocessing output is:
+- `data/processed/catalog_items/catalog_items_mvp.csv`
+
+This file is:
+- filtered to `adult-only` items: `women` and `men`
+- limited to the 4 MVP recommendation roles:
+  - `top`
+  - `bottom`
+  - `outerwear`
+  - `shoes`
+- cleaned and normalized for recommendation logic
+
+The current build intentionally excludes noisy categories such as:
+- `bodysuit`
+- `other_shoe`
+- `slippers`
+
 ## Recommendation Track Notes
 
-For your recommender system, start with `articles.csv` first.
-
-That means:
-- raw H&M metadata is the first data source
-- recommendations can be built before VLM enrichment
-- Vertex AI VLM comes later for better semantic attributes
+For the recommender system:
+- start with `articles.csv`
+- use metadata-first retrieval and outfit composition
+- add user wardrobe support after the catalog-only version works
+- add VLM enrichment later
 
 This is the safer build order because it gives you a working system earlier.
 
 ## Immediate Next Steps
 
-1. Create the repo structure above.
-2. Add `src/shared/schemas.py` for the item schema and API responses.
-3. Add `src/integrations/vertex_ai.py` for all Vertex AI calls.
-4. Let your teammate start `src/rag/`.
-5. Let you start `src/recommender/ingest_catalog.py` and `normalize_catalog.py`.
+1. Create and activate `.venv`.
+2. Copy `.env.example` to `.env`.
+3. Install dependencies with `pip install -r requirements.txt`.
+4. Let the QA track continue in `src/rag/`.
+5. Continue recommendation logic in `src/recommender/query_parser.py`, `retrieval.py`, `ranker.py`, and `outfits.py`.

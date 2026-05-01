@@ -136,8 +136,11 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
 .envrc
 .venv
+.venv/
 env/
 venv/
 ENV/
