@@ -1,0 +1,35 @@
+{
+  "row_count": 43921,
+  "role_counts": {
+    "top": 24178,
+    "bottom": 12186,
+    "outerwear": 4853,
+    "shoes": 2704
+  },
+  "target_group_counts": {
+    "women": 33378,
+    "men": 10543
+  },
+  "top_categories": {
+    "trousers": 6820,
+    "sweater": 6431,
+    "tshirt": 4359,
+    "blouse": 3537,
+    "top": 3288,
+    "shirt": 2581,
+    "jacket": 2407,
+    "tank_top": 2341,
+    "skirt": 2294,
+    "shorts": 2212,
+    "hoodie": 1306,
+    "blazer": 1015,
+    "cardigan": 904,
+    "leggings_tights": 822,
+    "boots": 702,
+    "sneakers": 683,
+    "coat": 441,
+    "sandals": 396,
+    "polo_shirt": 335,
+    "heeled_sandals": 202
+  }
+}
