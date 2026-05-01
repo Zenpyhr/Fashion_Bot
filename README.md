@@ -4,15 +4,15 @@ Fashion_Bot is a fashion assistant with two main capabilities:
 
 1. `Fashion News / QA RAG`
    Answer fashion questions using retrieved articles, guides, and trend content.
-2. `VLM + Personal Recommendation`
-   Understand clothing items and generate personalized outfit recommendations.
+2. `LLM + Personal Recommendation`
+   Understand user outfit requests and generate personalized clothing recommendations.
 
-The project uses `Vertex AI` as the model backend for:
-- text generation
-- embeddings
-- later VLM-based image understanding
+The project currently uses `OpenAI` as the LLM backend for:
+- query parsing
+- final outfit reranking
+- future recommendation explanation upgrades
 
-The goal is to keep both workstreams separate enough that two people can build in parallel with minimal overlap.
+The recommendation core is still metadata-first and deterministic, so the system can keep working even if the LLM is unavailable.
 
 ## Local Setup
 
@@ -55,11 +55,6 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Recommended project standard:
-- Python `3.11`
-- one `.venv` per teammate machine
-- install from the shared `requirements.txt`
-
 ### Team Setup Checklist
 
 Every teammate should run:
@@ -72,12 +67,11 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Then update `.env` with the right local values for:
-- `GOOGLE_CLOUD_PROJECT`
-- `GOOGLE_CLOUD_LOCATION`
-- `VERTEX_MODEL_TEXT`
-- `VERTEX_MODEL_VISION`
-- `EMBEDDING_MODEL`
+Then update `.env` with:
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL_QUERY_PARSER`
+- `OPENAI_MODEL_RERANKER`
+- `OPENAI_EMBEDDING_MODEL`
 - `DATABASE_URL`
 
 ## Team Split
@@ -97,14 +91,14 @@ Deliverable:
   - `citations`
   - `sources`
 
-### Track B: VLM + Personal Recommendation
+### Track B: LLM + Personal Recommendation
 
 Main responsibilities:
 - ingest H&M catalog metadata from `articles.csv`
 - ingest optional user wardrobe items later
 - normalize item metadata into one shared item schema
 - build recommendation retrieval and ranking
-- use Vertex AI VLM later to enrich missing attributes
+- use OpenAI later to improve parsing and reranking
 
 Deliverable:
 - a recommendation module or API that returns:
@@ -126,9 +120,9 @@ This split has minimal overlap because:
 - `FastAPI` for the backend API
 
 ### Model Layer
-- `Vertex AI Gemini` for text generation
-- `Vertex AI Embeddings` for RAG retrieval
-- `Vertex AI Vision / multimodal model` for later clothing attribute enrichment
+- `OpenAI Responses API` for text generation
+- `OpenAI embeddings` for retrieval support
+- `OpenAI models` for query parsing and final outfit reranking
 
 ### Data Layer
 - `articles.csv` as the first catalog metadata source
@@ -147,7 +141,7 @@ This means you can already:
 - retrieve matching items
 - build simple outfit recommendations
 
-No VLM is required yet.
+No LLM is required yet.
 
 ### Phase 2: Add Recommendation Logic
 Build the actual outfit pipeline on top of structured metadata:
@@ -160,14 +154,13 @@ Build the actual outfit pipeline on top of structured metadata:
 
 This is still mostly metadata-based.
 
-### Phase 3: Add Vertex AI VLM Enrichment
-Use the VLM only as an upgrade layer to infer attributes that are not cleanly available in `articles.csv`, such as:
-- `style`
-- `occasion`
-- `formality`
-- `season`
+### Phase 3: Add OpenAI LLM Support
+Use the LLM as an upgrade layer for:
+- query parsing
+- final outfit reranking
+- better recommendation explanations
 
-This keeps the VLM from becoming a blocker.
+This keeps the retrieval core stable and testable.
 
 ### Phase 4: Connect Both Tracks
 Expose both systems through one API or app:
@@ -182,7 +175,6 @@ Later, recommendation explanations can optionally call the QA system for extra s
 Fashion_Bot/
 ├── README.md
 ├── .gitignore
-├── articles.csv
 ├── pyproject.toml
 ├── requirements.txt
 ├── .env.example
@@ -198,9 +190,6 @@ Fashion_Bot/
 │   │   ├── article_chunks/
 │   │   └── wardrobe_items/
 │   └── sample/
-│       ├── sample_articles.csv
-│       ├── sample_questions.json
-│       └── sample_user_queries.json
 ├── notebooks/
 ├── app/
 │   ├── main.py
@@ -210,110 +199,28 @@ Fashion_Bot/
 │   └── dependencies.py
 ├── src/
 │   ├── shared/
-│   │   ├── config.py
-│   │   ├── schemas.py
-│   │   ├── constants.py
-│   │   └── utils.py
 │   ├── integrations/
-│   │   ├── vertex_ai.py
+│   │   ├── openai_client.py
 │   │   ├── embeddings.py
 │   │   └── storage.py
 │   ├── rag/
-│   │   ├── ingest_articles.py
-│   │   ├── chunk_articles.py
-│   │   ├── embed_articles.py
-│   │   ├── retrieve.py
-│   │   └── answer.py
 │   ├── recommender/
 │   │   ├── ingest_catalog.py
 │   │   ├── normalize_catalog.py
-│   │   ├── vlm_enrichment.py
 │   │   ├── query_parser.py
 │   │   ├── retrieval.py
 │   │   ├── ranker.py
-│   │   └── outfits.py
+│   │   ├── outfits.py
+│   │   └── vlm_enrichment.py
 │   └── database/
-│       ├── item_store.py
-│       ├── vector_store.py
-│       └── migrations/
+├── eval/
+│   ├── benchmark_queries.json
+│   ├── rubric.md
+│   ├── run_benchmark.py
+│   └── compare_outputs.py
 ├── tests/
-│   ├── test_rag.py
-│   ├── test_recommender.py
-│   ├── test_catalog_preprocessing.py
-│   └── test_api.py
 └── scripts/
-    ├── run_api.py
-    ├── build_catalog.py
-    └── build_rag_index.py
 ```
-
-## What Each Folder Is For
-
-### `app/`
-FastAPI entrypoint and API routes.
-
-### `src/shared/`
-Code used by both teammates:
-- config
-- shared schemas
-- constants
-- utility helpers
-
-### `src/integrations/`
-Wrappers for external services, especially `Vertex AI`.
-
-### `src/rag/`
-Owned mainly by the Fashion News / QA track.
-
-Contains:
-- article ingestion
-- chunking
-- embedding
-- retrieval
-- grounded answer generation
-
-### `src/recommender/`
-Owned mainly by the recommendation track.
-
-Contains:
-- H&M ingestion
-- metadata normalization
-- VLM enrichment
-- user query parsing
-- recommendation retrieval
-- outfit ranking
-
-### `src/database/`
-Shared persistence layer for:
-- item metadata
-- vector retrieval
-- future migrations
-
-### `scripts/`
-Simple scripts for running pipelines locally.
-
-## Proposed API Surface
-
-### `POST /qa`
-Input:
-- user fashion question
-
-Output:
-- answer
-- citations
-- sources
-
-### `POST /recommend`
-Input:
-- user request
-- optional `use_owned_only`
-- optional user wardrobe context
-
-Output:
-- parsed constraints
-- recommended outfits
-- explanations
-- missing items
 
 ## Current Recommender Data Status
 
@@ -334,20 +241,26 @@ The current build intentionally excludes noisy categories such as:
 - `other_shoe`
 - `slippers`
 
-## Recommendation Track Notes
+## Evaluation
 
-For the recommender system:
-- start with `articles.csv`
-- use metadata-first retrieval and outfit composition
-- add user wardrobe support after the catalog-only version works
-- add VLM enrichment later
+The repo includes a simple benchmark harness under `eval/`.
 
-This is the safer build order because it gives you a working system earlier.
+Run the current benchmark:
+
+```powershell
+python eval\run_benchmark.py
+```
+
+Compare two saved runs:
+
+```powershell
+python eval\compare_outputs.py eval\results\deterministic_baseline.json eval\results\benchmark_results_YYYYMMDDTHHMMSSZ.json
+```
 
 ## Immediate Next Steps
 
-1. Create and activate `.venv`.
-2. Copy `.env.example` to `.env`.
-3. Install dependencies with `pip install -r requirements.txt`.
-4. Let the QA track continue in `src/rag/`.
-5. Continue recommendation logic in `src/recommender/query_parser.py`, `retrieval.py`, `ranker.py`, and `outfits.py`.
+1. Activate `.venv`.
+2. Install dependencies with `pip install -r requirements.txt`.
+3. Paste your OpenAI key into `.env`.
+4. Re-run the benchmark.
+5. Continue improving parsing and reranking quality.

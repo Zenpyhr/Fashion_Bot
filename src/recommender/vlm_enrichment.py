@@ -1,4 +1,4 @@
-"""Use Vertex AI VLM to enrich clothing attributes later."""
+"""Use a multimodal model later to enrich clothing attributes."""
 
 
 def enrich_catalog_items() -> None:
