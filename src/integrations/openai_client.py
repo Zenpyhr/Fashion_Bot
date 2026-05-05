@@ -89,11 +89,16 @@ def llm_parse_query(user_query: str, deterministic_constraints: dict[str, Any]) 
         "- intent_rainy_or_cold\n"
         "- intent_polished\n"
         "- intent_not_sporty\n\n"
+        "semantic_query (REQUIRED string):\n"
+        "- One concise English line for embedding / dense retrieval (about 8–25 words).\n"
+        "- Summarize shopping intent in clear, positive terms (e.g. 'non-athletic everyday' not just repeating 'not sporty').\n"
+        "- Include men + garment/vibe keywords aligned with required_roles and intents. No markdown, no JSON inside the string.\n\n"
         "Few-shot examples (JSON only, abbreviated fields):\n"
         "Example 1\n"
         "User: \"Need something professional-looking, but keep it relaxed\"\n"
         "Return:\n"
         "{"
+        "\"semantic_query\":\"men smart casual work outfit polished non-athletic relaxed\","
         "\"target_group\":\"men\","
         "\"required_roles\":[\"top\",\"bottom\",\"shoes\"],"
         "\"formality\":\"smart_casual\","
@@ -105,6 +110,7 @@ def llm_parse_query(user_query: str, deterministic_constraints: dict[str, Any]) 
         "User: \"Outfit for warm weather with trainers\"\n"
         "Return:\n"
         "{"
+        "\"semantic_query\":\"men lightweight summer outfit trainers sneakers breathable\","
         "\"target_group\":\"men\","
         "\"required_roles\":[\"top\",\"bottom\",\"shoes\"],"
         "\"preferred_categories\":[\"sneakers\"],"
@@ -116,6 +122,7 @@ def llm_parse_query(user_query: str, deterministic_constraints: dict[str, Any]) 
         "User: \"Wet weather outfit — include an outer layer, hood preferred\"\n"
         "Return:\n"
         "{"
+        "\"semantic_query\":\"men rainy cold weather layered outfit jacket hood outerwear\","
         "\"target_group\":\"men\","
         "\"required_roles\":[\"top\",\"bottom\",\"shoes\",\"outerwear\"],"
         "\"requested_roles\":[\"outerwear\"],"
@@ -128,6 +135,7 @@ def llm_parse_query(user_query: str, deterministic_constraints: dict[str, Any]) 
         "User: \"Want a warm outer layer, avoid gym/athletic vibes\"\n"
         "Return:\n"
         "{"
+        "\"semantic_query\":\"men warm casual jacket outfit everyday non-athletic\","
         "\"target_group\":\"men\","
         "\"required_roles\":[\"top\",\"bottom\",\"shoes\",\"outerwear\"],"
         "\"preferred_categories\":[\"jacket\"],"
@@ -146,7 +154,7 @@ def llm_parse_query(user_query: str, deterministic_constraints: dict[str, Any]) 
         model=settings.openai_model_query_parser,
         instructions=instructions,
         payload=payload,
-        max_output_tokens=400,
+        max_output_tokens=500,
     )
 
 

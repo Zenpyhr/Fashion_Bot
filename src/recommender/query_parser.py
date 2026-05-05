@@ -190,6 +190,7 @@ def _merge_llm_constraints(base: dict, overrides: dict | None) -> dict:
 
     merged = dict(base)
     for key in (
+        "semantic_query",
         "target_group",
         "required_roles",
         "requested_roles",
@@ -210,6 +211,12 @@ def _merge_llm_constraints(base: dict, overrides: dict | None) -> dict:
         if value in (None, "", []):
             continue
 
+        if key == "semantic_query":
+            if not isinstance(value, str) or not value.strip():
+                continue
+            merged[key] = value.strip()
+            continue
+
         # Force men-only target_group for the current catalog.
         if key == "target_group":
             merged[key] = "men"
@@ -217,6 +224,46 @@ def _merge_llm_constraints(base: dict, overrides: dict | None) -> dict:
 
         merged[key] = value
     return merged
+
+
+def _deterministic_semantic_query(constraints: dict) -> str:
+    """Compact line for dense retrieval when the LLM does not return semantic_query."""
+
+    chunks: list[str] = []
+    tg = constraints.get("target_group")
+    if tg:
+        chunks.append(f"{tg} outfit")
+    for category in constraints.get("preferred_categories") or []:
+        chunks.append(str(category).replace("_", " "))
+    for color in constraints.get("preferred_colors") or []:
+        chunks.append(str(color))
+    if constraints.get("formality"):
+        chunks.append(str(constraints["formality"]).replace("_", " "))
+    if constraints.get("occasion"):
+        chunks.append(str(constraints["occasion"]).replace("_", " "))
+    if constraints.get("intent_not_sporty"):
+        chunks.append("non-athletic")
+    if constraints.get("intent_summer_lightweight"):
+        chunks.append("lightweight summer")
+    if constraints.get("intent_rainy_or_cold"):
+        chunks.append("weather layers outerwear")
+    if constraints.get("intent_polished"):
+        chunks.append("polished")
+    return " ".join(chunks).strip()
+
+
+def _ensure_semantic_query(constraints: dict) -> None:
+    """Set semantic_query for dense rerank: LLM value wins, else structured fallback; else omit (raw_query used)."""
+
+    sq = constraints.get("semantic_query")
+    if isinstance(sq, str) and sq.strip():
+        constraints["semantic_query"] = sq.strip()
+        return
+
+    constraints.pop("semantic_query", None)
+    fallback = _deterministic_semantic_query(constraints)
+    if fallback:
+        constraints["semantic_query"] = fallback
 
 
 def parse_user_query(user_query: str) -> dict:
@@ -230,6 +277,8 @@ def parse_user_query(user_query: str) -> dict:
         merged = _merge_llm_constraints(deterministic_constraints, llm_constraints)
         if llm_constraints:
             merged["parser_source"] = "openai"
+        _ensure_semantic_query(merged)
         return merged
 
+    _ensure_semantic_query(deterministic_constraints)
     return deterministic_constraints
