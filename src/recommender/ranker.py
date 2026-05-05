@@ -128,3 +128,12 @@ def rank_outfits(candidates_by_role: dict[str, list[dict]], constraints: dict) -
 
     outfits.sort(key=lambda outfit: outfit["score"], reverse=True)
     return _select_diverse_outfits(outfits[:30], limit=10)
+
+
+def score_outfit_items(items: list[dict], constraints: dict) -> int:
+    """Same outfit-level score used by rank_outfits (sum of item scores + cohesion + theme)."""
+
+    outfit_score = sum(int(item.get("candidate_score", 0)) for item in items)
+    outfit_score += _color_cohesion_score(items, constraints["preferred_colors"])
+    outfit_score += _section_theme_penalty(items, constraints["formality"])
+    return outfit_score

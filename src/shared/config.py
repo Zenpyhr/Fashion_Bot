@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     openai_reasoning_effort: str = "low"
     enable_openai_query_parser: bool = True
     enable_openai_reranker: bool = True
+    # When True, LLM picks item_ids from per-role pools to form 3 outfits (grounded; no invented SKUs).
+    enable_openai_combo_composer: bool = True
+    combo_composer_max_items_per_role_for_llm: int = 18
     enable_dense_retrieval_rerank: bool = False
     dense_shortlist_k_per_role: int = 200
     dense_rerank_n_per_role: int = 50

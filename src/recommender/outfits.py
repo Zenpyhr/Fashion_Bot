@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from src.integrations.openai_client import llm_rerank_outfits, openai_is_configured
+from src.integrations.openai_client import llm_compose_outfits, llm_rerank_outfits, openai_is_configured
 from src.recommender.query_parser import parse_user_query
-from src.recommender.ranker import rank_outfits
+from src.recommender.ranker import rank_outfits, score_outfit_items
 from src.recommender.retrieval import retrieve_candidates_by_role
 from src.shared.config import settings
 
@@ -92,6 +92,7 @@ def _select_top_diverse_outfits(ranked_outfits: list[dict], limit: int = 3) -> l
 
     selected = [ranked_outfits[0]]
     remaining = ranked_outfits[1:]
+    used_item_ids = {str(item.get("item_id")) for item in ranked_outfits[0].get("items", []) if item.get("item_id") is not None}
     selected_category_signatures = {_outfit_category_signature(ranked_outfits[0])}
 
     while remaining and len(selected) < limit:
@@ -105,7 +106,26 @@ def _select_top_diverse_outfits(ranked_outfits: list[dict], limit: int = 3) -> l
             for candidate in remaining
             if _outfit_category_signature(candidate) not in selected_category_signatures
         ]
-        candidate_pool = novel_structure_candidates or remaining
+
+        def _candidate_item_ids(candidate: dict) -> set[str]:
+            return {
+                str(item.get("item_id"))
+                for item in candidate.get("items", [])
+                if item.get("item_id") is not None
+            }
+
+        # Consider ALL remaining outfits for disjoint item_ids. Previously we only scanned
+        # novel_structure_candidates when that list was non-empty, which missed disjoint
+        # outfits that shared the same category signature as an already-picked outfit.
+        non_overlapping = [c for c in remaining if _candidate_item_ids(c).isdisjoint(used_item_ids)]
+
+        if non_overlapping:
+            novel_disjoint = [
+                c for c in non_overlapping if _outfit_category_signature(c) not in selected_category_signatures
+            ]
+            candidate_pool = novel_disjoint or non_overlapping
+        else:
+            candidate_pool = novel_structure_candidates or remaining
 
         for candidate in candidate_pool:
             similarity_penalty = max(_outfit_similarity(candidate, chosen) for chosen in selected)
@@ -122,6 +142,11 @@ def _select_top_diverse_outfits(ranked_outfits: list[dict], limit: int = 3) -> l
             break
 
         selected.append(best_candidate)
+        used_item_ids |= {
+            str(item.get("item_id"))
+            for item in best_candidate.get("items", [])
+            if item.get("item_id") is not None
+        }
         selected_category_signatures.add(_outfit_category_signature(best_candidate))
         remaining = [candidate for candidate in remaining if candidate is not best_candidate]
 
@@ -141,6 +166,7 @@ def _prepare_outfits_for_llm(ranked_outfits: list[dict]) -> list[dict]:
                 ),
                 "items": [
                     {
+                        "item_id": item.get("item_id"),
                         "display_name": item.get("display_name"),
                         "role": item.get("recommendation_role"),
                         "category": item.get("normalized_category"),
@@ -167,6 +193,7 @@ def _prepare_selected_outfits_for_llm(outfits: list[dict]) -> list[dict]:
                 ),
                 "items": [
                     {
+                        "item_id": item.get("item_id"),
                         "display_name": item.get("display_name"),
                         "role": item.get("recommendation_role"),
                         "category": item.get("normalized_category"),
@@ -178,6 +205,118 @@ def _prepare_selected_outfits_for_llm(outfits: list[dict]) -> list[dict]:
             }
         )
     return prepared
+
+
+def _compact_pool_item_for_llm(item: dict) -> dict:
+    return {
+        "item_id": item.get("item_id"),
+        "display_name": item.get("display_name"),
+        "recommendation_role": item.get("recommendation_role"),
+        "normalized_category": item.get("normalized_category"),
+        "normalized_color": item.get("normalized_color"),
+        "section_theme": item.get("section_theme"),
+        "candidate_score": item.get("candidate_score"),
+    }
+
+
+def _trim_pools_for_combo_llm(candidates_by_role: dict[str, list[dict]]) -> dict[str, list[dict]]:
+    cap = max(4, settings.combo_composer_max_items_per_role_for_llm)
+    return {role: items[:cap] for role, items in candidates_by_role.items()}
+
+
+def _build_role_item_lookup(pools: dict[str, list[dict]]) -> dict[str, dict[str, dict]]:
+    """role -> item_id -> full item dict (first wins)."""
+
+    out: dict[str, dict[str, dict]] = {}
+    for role, items in pools.items():
+        id_map: dict[str, dict] = {}
+        for item in items:
+            iid = item.get("item_id")
+            if iid is None:
+                continue
+            sid = str(iid)
+            if sid not in id_map:
+                id_map[sid] = item
+        out[role] = id_map
+    return out
+
+
+def _outfits_from_llm_compose(
+    llm_result: dict,
+    constraints: dict,
+    lookup: dict[str, dict[str, dict]],
+) -> list[dict] | None:
+    """Turn validated llm_compose_outfits JSON into outfit dicts, or None if invalid."""
+
+    raw = llm_result.get("outfits")
+    if not isinstance(raw, list) or len(raw) != 3:
+        return None
+
+    required_roles = constraints["required_roles"]
+    used_ids: set[str] = set()
+    outfits: list[dict] = []
+
+    for entry in raw:
+        if not isinstance(entry, dict):
+            return None
+        by_role = entry.get("items_by_role")
+        if not isinstance(by_role, dict):
+            return None
+
+        items: list[dict] = []
+        for role in required_roles:
+            rid = by_role.get(role)
+            if rid is None:
+                return None
+            sid = str(rid)
+            item = lookup.get(role, {}).get(sid)
+            if item is None:
+                return None
+            if sid in used_ids:
+                return None
+            used_ids.add(sid)
+            items.append(item)
+
+        explanation = entry.get("explanation")
+        ex = str(explanation).strip() if explanation is not None else ""
+
+        outfit = {
+            "score": score_outfit_items(items, constraints),
+            "items": items,
+            "roles": required_roles,
+            "llm_explanation": ex if ex else None,
+        }
+        outfits.append(outfit)
+
+    return outfits
+
+
+def _try_llm_compose_outfits(
+    user_query: str,
+    constraints: dict,
+    candidates_by_role: dict[str, list[dict]],
+) -> list[dict] | None:
+    """Grounded LLM combo builder; returns None on missing config, API failure, or invalid JSON."""
+
+    if not settings.enable_openai_combo_composer:
+        return None
+    if not openai_is_configured():
+        return None
+
+    required_roles = constraints["required_roles"]
+    if not required_roles or any(not candidates_by_role.get(role) for role in required_roles):
+        return None
+
+    pools = _trim_pools_for_combo_llm(candidates_by_role)
+    compact_pools = {
+        role: [_compact_pool_item_for_llm(it) for it in pools.get(role, [])] for role in required_roles
+    }
+    llm_result = llm_compose_outfits(user_query, constraints, compact_pools)
+    if not llm_result:
+        return None
+
+    lookup = _build_role_item_lookup(pools)
+    return _outfits_from_llm_compose(llm_result, constraints, lookup)
 
 
 def _apply_llm_reranking(user_query: str, constraints: dict, ranked_outfits: list[dict]) -> list[dict]:
@@ -245,19 +384,34 @@ def build_outfits(user_query: str) -> dict:
     # Orchestrator for the MVP recommender:
     # 1) understand the query
     # 2) retrieve item pools per role
-    # 3) combine and rank outfits
+    # 3) combine and rank outfits (deterministic product, or grounded LLM compose when enabled)
     constraints = parse_user_query(user_query)
     candidates_by_role = retrieve_candidates_by_role(constraints)
-    ranked_outfits = rank_outfits(candidates_by_role, constraints)
+
+    combo_builder_source = "deterministic"
+    ranked_outfits = _try_llm_compose_outfits(user_query, constraints, candidates_by_role)
+    if ranked_outfits:
+        combo_builder_source = "openai"
+    else:
+        ranked_outfits = rank_outfits(candidates_by_role, constraints)
+
     reranker_source = "deterministic"
-    if openai_is_configured() and settings.enable_openai_reranker:
+    if combo_builder_source != "openai" and openai_is_configured() and settings.enable_openai_reranker:
         reranked_outfits = _apply_llm_reranking(user_query, constraints, ranked_outfits)
         if reranked_outfits is not ranked_outfits:
             reranker_source = "openai"
         ranked_outfits = reranked_outfits
 
-    final_outfits = _select_top_diverse_outfits(ranked_outfits, limit=3)
-    if openai_is_configured() and settings.enable_openai_reranker:
+    if combo_builder_source == "openai":
+        final_outfits = ranked_outfits[:3]
+        reranker_source = "skipped"
+    else:
+        final_outfits = _select_top_diverse_outfits(ranked_outfits, limit=3)
+
+    need_explanations = not (
+        combo_builder_source == "openai" and all(o.get("llm_explanation") for o in final_outfits)
+    )
+    if need_explanations and openai_is_configured() and settings.enable_openai_reranker:
         final_outfits = _apply_llm_explanations_to_selected_outfits(user_query, constraints, final_outfits)
 
     formatted_outfits = [
@@ -275,6 +429,7 @@ def build_outfits(user_query: str) -> dict:
         "parsed_constraints": constraints,
         "llm_status": {
             "query_parser": constraints.get("parser_source", "deterministic"),
+            "combo_builder": combo_builder_source,
             "reranker": reranker_source,
         },
         "candidate_pools": {

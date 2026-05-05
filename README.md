@@ -2,51 +2,54 @@
 
 Fashion_Bot is a fashion assistant with two main capabilities:
 
-1. `Fashion News / QA RAG`
+1. **Fashion News / QA RAG**  
    Answer fashion questions using retrieved articles, guides, and trend content.
-2. `LLM + Personal Recommendation`
+
+2. **LLM + Personal Recommendation**  
    Understand user outfit requests and generate personalized clothing recommendations.
 
-The project currently uses `OpenAI` as the LLM backend for:
-- query parsing
-- final outfit reranking
-- future recommendation explanation upgrades
+The project uses **OpenAI** as the main LLM/embedding backend for the recommendation track:
 
-The recommendation core is still metadata-first and deterministic, so the system can keep working even if the LLM is unavailable.
+- Query parsing (optional refinement on top of deterministic rules)
+- Grounded **combo composition** (picker chooses only `item_id`s from retrieval pools)
+- Outfit reranking and explanation text (when enabled)
+- Embedding API for **dense retrieval** / catalog vector build (when enabled)
 
-## Local Setup
+The QA/RAG track may also use OpenAI or other models via LangChain in `QA/scripts/` (see Track A).
 
-Use a local virtual environment and a local `.env` file.
+**The recommendation core remains metadata-first with deterministic fallbacks**, so it keeps working if the API key is missing or specific flags are turned off.
 
-Why:
-- each teammate gets an isolated Python environment
-- both teammates install the same project dependencies
-- secrets and machine-specific settings stay out of git
+---
+
+## Why local `.env` and `requirements.txt`
+
+- Each teammate gets an isolated Python environment.
+- Everyone installs the same **root** dependencies for the shared API and Track B.
+- Secrets and machine-specific settings stay out of git.
+
+---
+
+## Local setup
 
 ### `.env.example`
 
-`.env.example` is a template file that shows which environment variables the project expects.
+`.env.example` is a template that lists environment variables the project expects.
 
-Workflow:
-1. copy `.env.example` to `.env`
-2. fill in your real local values
-
-Example:
+1. Copy `.env.example` to `.env`
+2. Fill in your real local values
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
 Important:
-- commit `.env.example`
-- do not commit `.env`
 
-### Virtual Environment
+- Commit `.env.example`
+- Do **not** commit `.env`
 
-Each teammate should create their own `.venv` locally.
-Do not copy the `.venv` folder from one machine to another.
+### Virtual environment
 
-Recommended setup:
+Each teammate should create their own `.venv` locally. Do not copy `.venv` between machines.
 
 ```powershell
 py -3.11 -m venv .venv
@@ -55,9 +58,12 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Team Setup Checklist
+### Root `requirements.txt`
 
-Every teammate should run:
+The file at the repo root installs **FastAPI**, **recommender stack** (pandas, numpy, SQLAlchemy, psycopg, pgvector), **OpenAI SDK**, and **pytest**.  
+**Track A** scripts under `QA/scripts/` may require **additional** packages (e.g. `requests`, `beautifulsoup4`, LangChain, Chroma)—install those when you work on that track (see imports in those scripts).
+
+### Team setup checklist
 
 ```powershell
 py -3.11 -m venv .venv
@@ -67,29 +73,100 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Then update `.env` with:
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL_QUERY_PARSER`
-- `OPENAI_MODEL_RERANKER`
-- `OPENAI_EMBEDDING_MODEL`
-- `DATABASE_URL`
+Then update `.env`, including at minimum:
 
-## Team Split
+- `OPENAI_API_KEY` (for full recommendation + embeddings)
+- `OPENAI_MODEL_QUERY_PARSER`, `OPENAI_MODEL_RERANKER`, `OPENAI_EMBEDDING_MODEL` (defaults are fine for many setups)
+- `DATABASE_URL` (if using Postgres + pgvector for dense retrieval)
+
+See `.env.example` for **all** variables (combo composer, dense retrieval toggles, catalog path).
+
+---
+
+## How to run the system (Track B — recommendation)
+
+### 1. Catalog data
+
+Set `CATALOG_ITEMS_CSV` to your processed catalog (e.g. `data/processed/catalog_items/catalog_items_demo.csv`).  
+Rebuild from H&M-style source data using `scripts/build_catalog.py` and modules under `src/recommender/` as needed.
+
+### 2. Optional: Postgres + pgvector (dense retrieval / embeddings)
+
+```powershell
+docker compose up -d
+```
+
+Defaults align with `.env.example` (`localhost:5432`, database `fashion_bot`, user/password `postgres`).
+
+Build or refresh item embeddings (OpenAI API; run when catalog or copy changes):
+
+```powershell
+python scripts\build_catalog_embeddings.py
+```
+
+Check extension/table/counts:
+
+```powershell
+python scripts\check_catalog_embeddings_db.py
+```
+
+Enable `ENABLE_DENSE_RETRIEVAL_RERANK=true` in `.env` only after embeddings exist.
+
+### 3. Run the API
+
+```powershell
+python scripts\run_api.py
+```
+
+- UI / root: http://127.0.0.1:8000/
+- Health: http://127.0.0.1:8000/health
+- Recommend: `POST /recommend` with JSON body `{"user_query": "..."}` (see `RecommendationRequest` in `src/shared/schemas.py`)
+
+The `/qa` route exists but returns a **placeholder** until Track A connects the RAG pipeline.
+
+### 4. CLI smoke test (no server)
+
+```powershell
+python scripts\test_recommender.py
+```
+
+---
+
+## Recommendation pipeline (current code)
+
+High-level order inside `build_outfits`:
+
+1. **Parse query** — deterministic base, optionally merged with **`llm_parse_query`**
+2. **Retrieve per-role pools** — sparse scoring; optional **per-role dense rerank** if enabled and DB is populated
+3. **Compose outfits** — **`llm_compose_outfits`** (grounded, disjoint item_ids across three looks when possible) **or** deterministic **`rank_outfits`**
+4. **Rerank** — optional LLM reorder of a shortlist (skipped when OpenAI composer already returns three outfits)
+5. **Pick three** — diversity helper or use the three from the composer
+6. **Explanations** — LLM and/or template **`_build_explanation`**
+
+Responses include **`llm_status`** (`query_parser`, `combo_builder`, `reranker`) describing which path ran.
+
+---
+
+## Team split
 
 ### Track A: Fashion News / QA RAG
 
 Main responsibilities:
-- collect fashion articles and style guides
-- clean and chunk documents
-- generate embeddings
-- retrieve relevant passages
-- answer questions with citations
+
+- Collect fashion articles and style guides
+- Clean and chunk documents
+- Generate embeddings
+- Retrieve relevant passages
+- Answer questions with citations
 
 Deliverable:
-- a QA module or API that returns:
+
+- A QA module or API that returns:
+
   - `answer`
   - `citations`
   - `sources`
+
 ```text
 QA/
 ├── data/
@@ -111,114 +188,150 @@ QA/
 ```
 
 #### `web_scraping.py`
+
 - Reads URL groups from `data/url_list.json`.
 - Downloads article pages and extracts the main text.
 - Cleans obvious boilerplate/paywall-like content.
 - Saves cleaned raw text files into `data/raw_articles/` with URL, scope, and title metadata.
 
 #### `process_for_rag.py`
+
 - Reads raw article `.txt` files from `data/raw_articles/`.
 - Parses metadata and cleans duplicate/noisy text.
 - Splits each article into overlapping chunks for retrieval.
 - Writes processed outputs to `data/processed_articles/` (clean articles + chunk records).
 
 #### `build_db.py`
+
 - Loads processed chunk records.
 - Converts chunks into embeddings.
 - Stores embeddings + metadata in Chroma vector DB under `index/fashion_chroma_db`.
 
 #### `query_answer.py`
+
 - Classifies a question into likely fashion scopes.
 - Retrieves relevant chunks from the vector DB (scope-aware, with global fallback).
 - Builds a grounded prompt and generates an answer with cited sources.
 - Main callable flow is `qa_answer(question)`.
 
 #### `evaluation_qa.py`
+
 - Runs a fixed set of test questions.
 - Evaluates retrieval coverage by measuring recall@k (did we retrieve expected scope content).
 - Uses an LLM judge to score whether answers are supported by retrieved evidence.
 - Prints per-case results and an overall summary.
 
+---
 
 ### Track B: LLM + Personal Recommendation
 
 Main responsibilities:
-- ingest H&M catalog metadata from `articles.csv`
-- ingest optional user wardrobe items later
-- normalize item metadata into one shared item schema
-- build recommendation retrieval and ranking
-- use OpenAI later to improve parsing and reranking
+
+- Ingest H&M catalog metadata from `articles.csv`
+- Ingest optional user wardrobe items later
+- Normalize item metadata into one shared item schema
+- Build recommendation retrieval and ranking
+- Use OpenAI for parsing, grounded combo selection, reranking, explanations, and optional embeddings
 
 Deliverable:
-- a recommendation module or API that returns:
+
+- A recommendation module or API that returns:
+
   - `parsed_constraints`
   - `outfits`
-  - `explanations`
+  - explanations (per outfit)
   - `missing_items`
+  - `llm_status` (which layers ran)
 
-## Why This Split Works
+Implementation lives under `src/recommender/`, `src/integrations/`, and `app/routes/recommend.py`.
+
+---
+
+## Why this split works
 
 This split has minimal overlap because:
-- the RAG system works on `fashion text documents`
-- the recommendation system works on `catalog + wardrobe item metadata`
-- the shared boundary is only the schema and API contract
 
-## Proposed Backend
+- The RAG system works on **fashion text documents**.
+- The recommendation system works on **catalog + wardrobe item metadata**.
+- The shared boundary is mainly the **API contract** and optional **shared OpenAI configuration**.
 
-### Application Layer
-- `FastAPI` for the backend API
+---
 
-### Model Layer
-- `OpenAI Responses API` for text generation
-- `OpenAI embeddings` for retrieval support
-- `OpenAI models` for query parsing and final outfit reranking
+## Proposed backend
 
-### Data Layer
-- `articles.csv` as the first catalog metadata source
-- local files or cloud storage for clothing images
-- vector database for article retrieval
-- relational table for item metadata
+### Application layer
 
-## Development Plan
+- **FastAPI** for the backend API (`app/main.py`).
 
-### Phase 1: Metadata-First Recommender
-Use `articles.csv` as the main source of clothing information.
+### Model layer
 
-This means you can already:
-- filter clothing categories
-- normalize colors and patterns
-- retrieve matching items
-- build simple outfit recommendations
+- **OpenAI Responses API**-style calls for JSON outputs (`src/integrations/openai_client.py`)
+- **OpenAI embeddings** for dense retrieval and building catalog vectors
+- Configurable models for query parsing, reranking, judging, and combo composition
 
-No LLM is required yet.
+### Data layer
 
-### Phase 2: Add Recommendation Logic
-Build the actual outfit pipeline on top of structured metadata:
-- parse user request
-- turn request into constraints
-- retrieve candidate items
-- compose outfits
-- rank combinations
-- return top outfit suggestions
+- `articles.csv` / processed **catalog CSV** as the first clothing metadata source
+- Local files for clothing images (`data/processed/...`)
+- **Vector DB / pgvector** for article or catalog embeddings (depending on track)
+- Relational metadata for items when using Postgres
 
-This is still mostly metadata-based.
+### HTTP routes (current)
 
-### Phase 3: Add OpenAI LLM Support
+- `GET /` — static UI
+- `GET /health`
+- `POST /recommend` — outfit recommendations
+- `POST /qa` — stub until Track A integrates the pipeline
+
+---
+
+## Development plan
+
+### Phase 1: Metadata-first recommender
+
+Use processed catalog CSV as the main source of clothing information so you can:
+
+- Filter clothing categories
+- Normalize colors and patterns
+- Retrieve matching items
+- Build simple outfit recommendations
+
+No LLM is required for a baseline.
+
+### Phase 2: Add recommendation logic
+
+Build the outfit pipeline on top of structured metadata:
+
+- Parse user request
+- Turn request into constraints
+- Retrieve candidate items
+- Compose outfits (deterministic and/or LLM-grounded)
+- Rank combinations
+- Return top outfit suggestions
+
+### Phase 3: Add OpenAI support
+
 Use the LLM as an upgrade layer for:
-- query parsing
-- final outfit reranking
-- better recommendation explanations
 
-This keeps the retrieval core stable and testable.
+- Query parsing refinement
+- Grounded combo composition from pools
+- Reranking and explanations
+- Embeddings for dense retrieval
 
-### Phase 4: Connect Both Tracks
+Keeps retrieval testable when flags are off.
+
+### Phase 4: Connect both tracks
+
 Expose both systems through one API or app:
+
 - `/qa` for fashion RAG
 - `/recommend` for outfit generation
 
 Later, recommendation explanations can optionally call the QA system for extra styling context.
 
-## Proposed File Structure
+---
+
+## Proposed file structure
 
 ```text
 Fashion_Bot/
@@ -226,6 +339,7 @@ Fashion_Bot/
 ├── .gitignore
 ├── pyproject.toml
 ├── requirements.txt
+├── docker-compose.yml
 ├── .env.example
 ├── data/
 │   ├── raw/
@@ -251,7 +365,7 @@ Fashion_Bot/
 │   ├── integrations/
 │   │   ├── openai_client.py
 │   │   ├── embeddings.py
-│   │   └── storage.py
+│   │   └── pgvector_store.py
 │   ├── rag/
 │   ├── recommender/
 │   │   ├── ingest_catalog.py
@@ -265,51 +379,68 @@ Fashion_Bot/
 ├── eval/
 │   ├── benchmark_queries.json
 │   ├── rubric.md
-│   ├── run_benchmark.py
-│   └── compare_outputs.py
+│   ├── run_retrieval_eval.py
+│   ├── judge_retrieval_run.py
+│   ├── queries_eval_10_mens.txt
+│   └── artifacts/
 ├── tests/
-└── scripts/
+├── scripts/
+└── QA/
 ```
 
-## Current Recommender Data Status
+(Not every folder may exist in your clone; treat this as the target layout.)
 
-The current recommender preprocessing output is:
+---
+
+## Current recommender data status
+
+The recommender preprocessing output includes files such as:
+
 - `data/processed/catalog_items/catalog_items_mvp.csv`
 
-This file is:
-- filtered to `adult-only` items: `women` and `men`
-- limited to the 4 MVP recommendation roles:
-  - `top`
-  - `bottom`
-  - `outerwear`
-  - `shoes`
-- cleaned and normalized for recommendation logic
+Typical properties:
 
-The current build intentionally excludes noisy categories such as:
-- `bodysuit`
-- `other_shoe`
-- `slippers`
+- Filtered to **adult** items (`women` and `men` where applicable)
+- Limited to MVP recommendation roles: `top`, `bottom`, `outerwear`, `shoes`
+- Cleaned and normalized for recommendation logic
+
+Noisy categories may be excluded (e.g. `bodysuit`, `other_shoe`, `slippers`), depending on the build.
+
+For demos, `catalog_items_demo.csv` is also used—set **`CATALOG_ITEMS_CSV`** in `.env` to the file you actually keep in the repo.
+
+---
 
 ## Evaluation
 
-The repo includes a simple benchmark harness under `eval/`.
+### Recommender / retrieval (current scripts)
 
-Run the current benchmark:
+Artifacts: `eval/artifacts/` (raw runs and judged JSON; many files are gitignored).
+
+```powershell
+python eval\run_retrieval_eval.py --file eval\queries_eval_10_mens.txt
+python eval\judge_retrieval_run.py
+```
+
+See `eval/rubric.md` for the judge rubric.
+
+### Older / generic benchmark harness
+
+If your branch still contains:
 
 ```powershell
 python eval\run_benchmark.py
-```
-
-Compare two saved runs:
-
-```powershell
 python eval\compare_outputs.py eval\results\deterministic_baseline.json eval\results\benchmark_results_YYYYMMDDTHHMMSSZ.json
 ```
 
-## Immediate Next Steps
+use those as documented in older notes; otherwise prefer **`run_retrieval_eval.py` / `judge_retrieval_run.py`** above.
+
+---
+
+## Immediate next steps
 
 1. Activate `.venv`.
-2. Install dependencies with `pip install -r requirements.txt`.
-3. Paste your OpenAI key into `.env`.
-4. Re-run the benchmark.
-5. Continue improving parsing and reranking quality.
+2. `pip install -r requirements.txt`.
+3. Copy `.env.example` → `.env` and set `OPENAI_API_KEY` (and `DATABASE_URL` if using Docker Postgres).
+4. Run `python scripts\run_api.py` and exercise `POST /recommend`.
+5. (Optional) `docker compose up -d`, `python scripts\build_catalog_embeddings.py`, then enable dense retrieval in `.env`.
+6. Continue improving parsing, retrieval, and outfit quality using `eval/` runs.

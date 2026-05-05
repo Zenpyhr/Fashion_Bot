@@ -1,11 +1,27 @@
+# Root environment: API + Track B recommender + Postgres/pgvector + eval.
+# Includes every package from the original one-block requirements.txt, plus numpy
+# (explicit; used by src/recommender/retrieval.py — also pulled in by pandas).
+#
+# Track A (QA/scripts): may need extra installs — requests, beautifulsoup4, langchain_*, etc.
+
+# --- API & app ---
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.8.0
 pydantic-settings>=2.4.0
+python-dotenv>=1.0.1
+
+# --- Recommender: catalog & scoring ---
 pandas>=2.2.0
+numpy>=1.26.0
+
+# --- Postgres + pgvector (dense retrieval & embedding storage) ---
 sqlalchemy>=2.0.0
 psycopg[binary]>=3.2.0
 pgvector>=0.3.0
+
+# --- OpenAI (query parser, combo composer, reranker/explanations, embeddings API) ---
 openai>=1.40.0
-python-dotenv>=1.0.1
+
+# --- Dev / tests ---
 pytest>=8.3.0
