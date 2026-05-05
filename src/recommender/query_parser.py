@@ -175,6 +175,11 @@ def _deterministic_parse_user_query(user_query: str) -> dict:
         "formality": formality,
         "occasion": occasion,
         "search_terms": search_terms,
+        # Optional intent flags (may be filled by the LLM parser).
+        "intent_summer_lightweight": False,
+        "intent_rainy_or_cold": False,
+        "intent_polished": False,
+        "intent_not_sporty": False,
         "available_roles": list(RECOMMENDATION_ROLES),
     }
 
@@ -193,9 +198,24 @@ def _merge_llm_constraints(base: dict, overrides: dict | None) -> dict:
         "formality",
         "occasion",
         "search_terms",
+        "intent_summer_lightweight",
+        "intent_rainy_or_cold",
+        "intent_polished",
+        "intent_not_sporty",
     ):
-        if key in overrides and overrides[key] not in (None, "", []):
-            merged[key] = overrides[key]
+        if key not in overrides:
+            continue
+
+        value = overrides[key]
+        if value in (None, "", []):
+            continue
+
+        # Force men-only target_group for the current catalog.
+        if key == "target_group":
+            merged[key] = "men"
+            continue
+
+        merged[key] = value
     return merged
 
 

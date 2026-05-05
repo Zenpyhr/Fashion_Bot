@@ -244,25 +244,58 @@ def _detect_query_intents(constraints: dict) -> dict[str, bool]:
     This intentionally uses broad domain vocabulary (not eval-test hardcoding).
     """
 
+    # Prefer explicit flags from the LLM parser if present.
+    explicit_summer = constraints.get("intent_summer_lightweight")
+    explicit_rainy_cold = constraints.get("intent_rainy_or_cold")
+    explicit_polished = constraints.get("intent_polished")
+    explicit_not_sporty = constraints.get("intent_not_sporty")
+
     text = _query_text(constraints)
     terms = {str(t).lower() for t in (constraints.get("search_terms") or [])}
     occasion = str(constraints.get("occasion") or "").lower()
     formality = str(constraints.get("formality") or "").lower()
 
-    summer = any(k in text for k in ("summer", "hot", "heat", "lightweight", "breathable", "airy"))
-    rainy = any(k in text for k in ("rain", "rainy", "drizzle", "storm", "waterproof", "water-resistant"))
-    cold = any(k in text for k in ("cold", "chilly", "winter", "snow", "insulated", "padded", "warm"))
+    summer = bool(explicit_summer) if explicit_summer is not None else any(
+        k in text for k in ("summer", "hot", "heat", "lightweight", "breathable", "airy")
+    )
+    rainy_or_cold = (
+        bool(explicit_rainy_cold)
+        if explicit_rainy_cold is not None
+        else any(k in text for k in ("rain", "rainy", "drizzle", "storm", "waterproof", "water-resistant"))
+        or any(k in text for k in ("cold", "chilly", "winter", "snow", "insulated", "padded", "warm"))
+    )
 
-    polished = any(k in text for k in ("polished", "clean", "minimal", "smart casual", "smart-casual", "office", "work", "meeting", "dinner", "date"))
-    # Use existing parsed fields as strong signals too.
-    polished = polished or occasion in {"work", "dinner", "date_night"} or formality in {"business", "smart_casual", "formal"}
+    polished = (
+        bool(explicit_polished)
+        if explicit_polished is not None
+        else any(
+            k in text
+            for k in (
+                "polished",
+                "clean",
+                "minimal",
+                "smart casual",
+                "smart-casual",
+                "office",
+                "work",
+                "meeting",
+                "dinner",
+                "date",
+            )
+        )
+        or occasion in {"work", "dinner", "date_night"}
+        or formality in {"business", "smart_casual", "formal"}
+    )
 
-    not_sporty = ("sporty" in terms and "not" in terms) or ("not sporty" in text) or ("avoid sporty" in text)
+    not_sporty = (
+        bool(explicit_not_sporty)
+        if explicit_not_sporty is not None
+        else ("sporty" in terms and "not" in terms) or ("not sporty" in text) or ("avoid sporty" in text)
+    )
 
     return {
         "summer": summer,
-        "rainy": rainy,
-        "cold": cold,
+        "rainy_or_cold": rainy_or_cold,
         "polished": polished,
         "not_sporty": not_sporty,
     }
@@ -303,14 +336,14 @@ def _score_guardrails(row: pd.Series, constraints: dict) -> int:
             score += 2
 
     # Rainy/cold: discourage shorts, boost protective details.
-    if intents["rainy"] or intents["cold"]:
+    if intents["rainy_or_cold"]:
         if category == "shorts":
             score -= 6
         if role == "outerwear":
             score += 2
         if any(k in text for k in ("hood", "waterproof", "water-resistant", "rain")):
             score += 2
-        if intents["cold"] and any(k in text for k in ("padded", "insulated", "lined", "fleece", "wool")):
+        if any(k in text for k in ("padded", "insulated", "lined", "fleece", "wool")):
             score += 2
 
     # Polished/office/dinner: discourage shorts and sport theme.

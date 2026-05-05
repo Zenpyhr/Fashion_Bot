@@ -73,11 +73,22 @@ def llm_parse_query(user_query: str, deterministic_constraints: dict[str, Any]) 
     """Use OpenAI to refine the query constraints into structured JSON."""
 
     instructions = (
-        "You are a fashion recommendation query parser. "
+        "You are a fashion recommendation query parser for a MEN'S-only catalog (target_group must be 'men'). "
         "Return valid JSON only. Do not include markdown. "
-        "Keep the schema shape aligned with the provided deterministic constraints. "
-        "Use only these roles: top, bottom, shoes, outerwear. "
-        "Use only these target groups: women, men. "
+        "Keep the schema shape aligned with the provided deterministic constraints.\n\n"
+        "Allowed values:\n"
+        "- target_group: men\n"
+        "- required_roles/requested_roles: top, bottom, shoes, outerwear\n"
+        "- formality: casual, smart_casual, business, formal, sporty, or null\n"
+        "- occasion: work, dinner, party, date_night, travel, casual, or null\n\n"
+        "Negation rule:\n"
+        "- If the user says 'not X' or 'avoid X', do NOT set formality to X.\n"
+        "  Example: 'not too formal' should NOT become 'formal' (prefer smart_casual or business).\n\n"
+        "Optional intent flags (booleans):\n"
+        "- intent_summer_lightweight\n"
+        "- intent_rainy_or_cold\n"
+        "- intent_polished\n"
+        "- intent_not_sporty\n\n"
         "If the request is ambiguous, keep the deterministic fallback value."
     )
     payload = {
