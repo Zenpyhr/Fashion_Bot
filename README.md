@@ -73,22 +73,46 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Then update `.env`, including at minimum:
+Then update `.env`:
 
-- `OPENAI_API_KEY` (for full recommendation + embeddings)
-- `OPENAI_MODEL_QUERY_PARSER`, `OPENAI_MODEL_RERANKER`, `OPENAI_EMBEDDING_MODEL` (defaults are fine for many setups)
-- `DATABASE_URL` (if using Postgres + pgvector for dense retrieval)
+- Always set `OPENAI_API_KEY` if you want LLM parsing/reranking/composition or to build embeddings.
+- Leave the default model values alone unless you intentionally want different OpenAI models.
+- Leave `CATALOG_ITEMS_CSV=data/processed/catalog_items/catalog_items_demo.csv` if you want the included demo catalog.
+- Leave `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/fashion_bot` if you use the provided local Docker Postgres.
+- Leave `ENABLE_DENSE_RETRIEVAL_RERANK=false` at first. Turn it on only after the embeddings table has been built successfully.
 
-See `.env.example` for **all** variables (combo composer, dense retrieval toggles, catalog path).
+`.env.example` shows the recommended local defaults for the full Track B setup.
 
 ---
 
 ## How to run the system (Track B — recommendation)
 
+### 0. Copy `.env.example` to `.env`
+
+```powershell
+Copy-Item .env.example .env
+```
+
+For the normal local setup, these values are already good by default in both files:
+
+- `OPENAI_MODEL_QUERY_PARSER=gpt-4o-mini`
+- `OPENAI_MODEL_RERANKER=gpt-4o-mini`
+- `OPENAI_EMBEDDING_MODEL=text-embedding-3-large`
+- `CATALOG_ITEMS_CSV=data/processed/catalog_items/catalog_items_demo.csv`
+- `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/fashion_bot`
+- `ENABLE_DENSE_RETRIEVAL_RERANK=false`
+
+Only change `.env` when your setup is different:
+
+- Set `OPENAI_API_KEY` to your real key if you want OpenAI-powered parsing/reranking/composition or need to build embeddings.
+- Change `CATALOG_ITEMS_CSV` only if you want to use a different processed catalog file.
+- Change `DATABASE_URL` only if your Postgres host, port, database, username, or password differ from the local Docker defaults.
+- Change model names or retrieval flags only if you are intentionally testing a different configuration.
+
 ### 1. Catalog data
 
-Set `CATALOG_ITEMS_CSV` to your processed catalog (e.g. `data/processed/catalog_items/catalog_items_demo.csv`).  
-Rebuild from H&M-style source data using `scripts/build_catalog.py` and modules under `src/recommender/` as needed.
+By default, Track B uses `data/processed/catalog_items/catalog_items_demo.csv`, so you do not need to change `CATALOG_ITEMS_CSV` for the demo path.  
+Rebuild or swap the catalog only if you want different inventory, using `scripts/build_catalog.py` and modules under `src/recommender/`.
 
 ### 2. Optional: Postgres + pgvector (dense retrieval / embeddings)
 
@@ -96,7 +120,9 @@ Rebuild from H&M-style source data using `scripts/build_catalog.py` and modules 
 docker compose up -d
 ```
 
-Defaults align with `.env.example` (`localhost:5432`, database `fashion_bot`, user/password `postgres`).
+If you are using the provided local Docker setup, the default `.env` / `.env.example` value already matches this:
+
+- `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/fashion_bot`
 
 Build or refresh item embeddings (OpenAI API; run when catalog or copy changes):
 
@@ -110,7 +136,7 @@ Check extension/table/counts:
 python scripts\check_catalog_embeddings_db.py
 ```
 
-Enable `ENABLE_DENSE_RETRIEVAL_RERANK=true` in `.env` only after embeddings exist.
+After embeddings exist, change `ENABLE_DENSE_RETRIEVAL_RERANK` from `false` to `true` in `.env` if you want dense reranking enabled.
 
 ### 3. Run the API
 
