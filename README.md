@@ -103,11 +103,41 @@ QA/
 ├── index/
 │   └── ... (vector index files)
 └── scripts/
-    ├── build_db.py
-    ├── evaluation_qa.py
+    ├── web_scraping.py
     ├── process_for_rag.py
+    ├── build_db.py
     ├── query_answer.py
-    └── web_scraping.py
+    └── evaluation_qa.py
+
+### `web_scraping.py`
+- Reads URL groups from `data/url_list.json`.
+- Downloads article pages and extracts the main text.
+- Cleans obvious boilerplate/paywall-like content.
+- Saves cleaned raw text files into `data/raw_articles/` with URL, scope, and title metadata.
+
+### `process_for_rag.py`
+- Reads raw article `.txt` files from `data/raw_articles/`.
+- Parses metadata and cleans duplicate/noisy text.
+- Splits each article into overlapping chunks for retrieval.
+- Writes processed outputs to `data/processed_articles/` (clean articles + chunk records).
+
+### `build_db.py`
+- Loads processed chunk records.
+- Converts chunks into embeddings.
+- Stores embeddings + metadata in Chroma vector DB under `index/fashion_chroma_db`.
+
+### `query_answer.py`
+- Classifies a question into likely fashion scopes.
+- Retrieves relevant chunks from the vector DB (scope-aware, with global fallback).
+- Builds a grounded prompt and generates an answer with cited sources.
+- Main callable flow is `qa_answer(question)`.
+
+### `evaluation_qa.py`
+- Runs a fixed set of test questions.
+- Evaluates retrieval coverage (did we retrieve expected scope content).
+- Uses an LLM judge to score whether answers are supported by retrieved evidence.
+- Prints per-case results and an overall summary.
+
 
 ### Track B: LLM + Personal Recommendation
 
