@@ -5,8 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     openai_api_key: str = ""
-    openai_model_query_parser: str = "gpt-5.4-mini"
-    openai_model_reranker: str = "gpt-5.4-mini"
+    openai_model_query_parser: str = "gpt-4o-mini"
+    openai_model_reranker: str = "gpt-4o-mini"
+    openai_model_judge: str = "gpt-4o-mini"
     openai_embedding_model: str = "text-embedding-3-large"
     openai_reasoning_effort: str = "low"
     enable_openai_query_parser: bool = True

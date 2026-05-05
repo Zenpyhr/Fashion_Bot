@@ -215,3 +215,7 @@ data/raw/hm/images.zip
 data/raw/hm/*.zip
 data/processed/demo_images/
 Images/
+
+# Eval artifacts (large, local outputs)
+eval/artifacts/
+eval/artifacts/**/*.json

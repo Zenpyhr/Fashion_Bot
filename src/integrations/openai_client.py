@@ -35,8 +35,11 @@ def _call_openai_json(
     if not openai_is_configured():
         return None
 
+    client = create_openai_client()
+
+    # Some models/endpoints may not support the `reasoning` field. We first try with it,
+    # then retry without reasoning on failure.
     try:
-        client = create_openai_client()
         response = client.responses.create(
             model=model,
             reasoning={"effort": settings.openai_reasoning_effort},
@@ -45,8 +48,16 @@ def _call_openai_json(
             max_output_tokens=max_output_tokens,
         )
     except Exception:
-        # Fall back cleanly when the API is unavailable, blocked by the environment, or misconfigured.
-        return None
+        try:
+            response = client.responses.create(
+                model=model,
+                instructions=instructions,
+                input=json.dumps(payload),
+                max_output_tokens=max_output_tokens,
+            )
+        except Exception:
+            # Fall back cleanly when the API is unavailable, blocked by the environment, or misconfigured.
+            return None
 
     raw_text = (response.output_text or "").strip()
     if not raw_text:
@@ -111,4 +122,47 @@ def llm_rerank_outfits(
         instructions=instructions,
         payload=payload,
         max_output_tokens=700,
+    )
+
+
+def llm_judge_retrieval(
+    *,
+    user_query: str,
+    sparse_only: dict[str, Any],
+    sparse_plus_dense: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Use an LLM to judge which retrieval result better matches the query."""
+
+    instructions = (
+        "You are a strict retrieval evaluator for a fashion recommender. "
+        "You will compare two retrieval outputs for the same user query. "
+        "Return valid JSON only. Do not include markdown. "
+        "Do NOT judge the writing quality of explanations. Judge the outfits/items.\n\n"
+        "Scoring rubric (0-5 each):\n"
+        "- relevance: matches the user intent (warm/cozy/polished/lightweight/etc.)\n"
+        "- constraint_fit: respects explicit constraints (category mentions, 'not X', office vs sporty, etc.)\n"
+        "- coherence: the outfit combinations make sense together\n"
+        "overall = relevance + constraint_fit + coherence (0-15)\n\n"
+        "Output JSON format:\n"
+        "{"
+        "\"winner\":\"sparse_only|sparse_plus_dense|tie\","
+        "\"scores\":{"
+        "\"sparse_only\":{\"relevance\":0,\"constraint_fit\":0,\"coherence\":0,\"overall\":0},"
+        "\"sparse_plus_dense\":{\"relevance\":0,\"constraint_fit\":0,\"coherence\":0,\"overall\":0}"
+        "},"
+        "\"reasons\":[\"...\"]"
+        "}"
+    )
+
+    payload = {
+        "task": "judge_retrieval_outputs",
+        "user_query": user_query,
+        "candidate_a": {"name": "sparse_only", **sparse_only},
+        "candidate_b": {"name": "sparse_plus_dense", **sparse_plus_dense},
+    }
+    return _call_openai_json(
+        model=settings.openai_model_judge,
+        instructions=instructions,
+        payload=payload,
+        max_output_tokens=500,
     )

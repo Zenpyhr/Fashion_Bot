@@ -1,0 +1,32 @@
+# 10-query regular evaluation set (mens catalog)
+# Keep these stable so you can compare retrieval changes over time.
+
+# Outerwear + negation
+Warm casual jacket, not sporty
+
+# Style nuance
+Relaxed but polished dinner outfit
+
+# Office + negation
+Clean office outfit, not too formal
+
+# Seasonality + sneakers
+Lightweight summer outfit with sneakers
+
+# Cozy + detail
+Something cozy with a zip hoodie
+
+# Color direction
+All black outfit with white sneakers
+
+# Formal-ish but not full suit
+Smart casual date night outfit, not flashy
+
+# Weather + function
+Rainy day outfit with a hooded jacket
+
+# Minimalist style
+Minimal clean outfit, neutral colors only
+
+# Footwear constraint
+Outfit with boots for a casual weekend

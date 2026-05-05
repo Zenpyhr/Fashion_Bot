@@ -119,8 +119,9 @@ def _deterministic_parse_user_query(user_query: str) -> dict:
             target_group = group
             break
     if target_group is None:
-        # MVP fallback keeps the results coherent instead of mixing men/women items.
-        target_group = "women"
+        # The current demo catalog only contains men's items, so default to men
+        # to avoid empty retrieval when the user does not specify a target group.
+        target_group = "men"
 
     preferred_colors: list[str] = []
     if any(keyword in normalized_query for keyword in NEUTRAL_KEYWORDS):
