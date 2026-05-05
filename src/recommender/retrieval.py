@@ -228,6 +228,103 @@ def _score_occasion_proxy(row: pd.Series, occasion: str | None) -> int:
     return score
 
 
+def _query_text(constraints: dict) -> str:
+    raw = (
+        constraints.get("semantic_query")
+        or constraints.get("raw_query")
+        or constraints.get("raw_text")
+        or ""
+    )
+    return str(raw).strip().lower()
+
+
+def _detect_query_intents(constraints: dict) -> dict[str, bool]:
+    """Infer lightweight intent flags from query + existing parsed fields.
+
+    This intentionally uses broad domain vocabulary (not eval-test hardcoding).
+    """
+
+    text = _query_text(constraints)
+    terms = {str(t).lower() for t in (constraints.get("search_terms") or [])}
+    occasion = str(constraints.get("occasion") or "").lower()
+    formality = str(constraints.get("formality") or "").lower()
+
+    summer = any(k in text for k in ("summer", "hot", "heat", "lightweight", "breathable", "airy"))
+    rainy = any(k in text for k in ("rain", "rainy", "drizzle", "storm", "waterproof", "water-resistant"))
+    cold = any(k in text for k in ("cold", "chilly", "winter", "snow", "insulated", "padded", "warm"))
+
+    polished = any(k in text for k in ("polished", "clean", "minimal", "smart casual", "smart-casual", "office", "work", "meeting", "dinner", "date"))
+    # Use existing parsed fields as strong signals too.
+    polished = polished or occasion in {"work", "dinner", "date_night"} or formality in {"business", "smart_casual", "formal"}
+
+    not_sporty = ("sporty" in terms and "not" in terms) or ("not sporty" in text) or ("avoid sporty" in text)
+
+    return {
+        "summer": summer,
+        "rainy": rainy,
+        "cold": cold,
+        "polished": polished,
+        "not_sporty": not_sporty,
+    }
+
+
+def _score_guardrails(row: pd.Series, constraints: dict) -> int:
+    """Soft rule penalties/boosts to prevent obvious mismatches.
+
+    These are deliberately modest (guardrails, not hard filters).
+    """
+
+    intents = _detect_query_intents(constraints)
+    category = str(row.get("normalized_category", "")).lower()
+    role = str(row.get("recommendation_role", "")).lower()
+    section_theme = str(row.get("section_theme", "")).lower()
+    desc = str(row.get("description", "")).lower()
+    name = str(row.get("display_name", "")).lower()
+    text = f"{name} {desc}"
+
+    score = 0
+
+    # Not sporty: penalize sport theme and explicitly sporty categories.
+    if intents["not_sporty"]:
+        if section_theme == "sport":
+            score -= 8
+        if category in {"leggings_tights", "outdoor_trousers"}:
+            score -= 3
+
+    # Summer/lightweight: discourage heavy layers.
+    if intents["summer"]:
+        if category in {"hoodie", "sweater", "coat"}:
+            score -= 4
+        if role == "outerwear" and category in {"jacket", "coat"}:
+            score -= 2
+        if category == "shorts":
+            score += 2
+        if any(k in text for k in ("linen", "lightweight", "breathable", "short sleeve")):
+            score += 2
+
+    # Rainy/cold: discourage shorts, boost protective details.
+    if intents["rainy"] or intents["cold"]:
+        if category == "shorts":
+            score -= 6
+        if role == "outerwear":
+            score += 2
+        if any(k in text for k in ("hood", "waterproof", "water-resistant", "rain")):
+            score += 2
+        if intents["cold"] and any(k in text for k in ("padded", "insulated", "lined", "fleece", "wool")):
+            score += 2
+
+    # Polished/office/dinner: discourage shorts and sport theme.
+    if intents["polished"]:
+        if category == "shorts":
+            score -= 6
+        if section_theme == "sport":
+            score -= 4
+        if category in {"shirt", "trousers", "blazer", "coat", "boots"}:
+            score += 2
+
+    return score
+
+
 def _score_item(row: pd.Series, constraints: dict) -> int:
     # Start every candidate with a shared base score, then add query-specific boosts.
     score = 10
@@ -236,6 +333,7 @@ def _score_item(row: pd.Series, constraints: dict) -> int:
     score += _score_query_term_overlap(row, constraints["search_terms"])
     score += _score_formality_proxy(row, constraints["formality"])
     score += _score_occasion_proxy(row, constraints["occasion"])
+    score += _score_guardrails(row, constraints)
 
     if constraints["formality"] in {"formal", "smart_casual", "business"} and str(row["section_theme"]).lower() == "sport":
         score -= 8

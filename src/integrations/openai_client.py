@@ -137,12 +137,16 @@ def llm_judge_retrieval(
         "You are a strict retrieval evaluator for a fashion recommender. "
         "You will compare two retrieval outputs for the same user query. "
         "Return valid JSON only. Do not include markdown. "
-        "Do NOT judge the writing quality of explanations. Judge the outfits/items.\n\n"
+        "Do NOT judge the writing quality of explanations. Ignore explanation prose completely.\n"
+        "Judge ONLY the structured evidence: item display_name, category, role, color, section_theme, and scores.\n\n"
         "Scoring rubric (0-5 each):\n"
         "- relevance: matches the user intent (warm/cozy/polished/lightweight/etc.)\n"
         "- constraint_fit: respects explicit constraints (category mentions, 'not X', office vs sporty, etc.)\n"
         "- coherence: the outfit combinations make sense together\n"
         "overall = relevance + constraint_fit + coherence (0-15)\n\n"
+        "Reasoning rules:\n"
+        "- If two outputs are close, pick tie.\n"
+        "- In reasons, cite concrete evidence (e.g., 'includes shorts for rainy day', 'section_theme sport', etc.).\n\n"
         "Output JSON format:\n"
         "{"
         "\"winner\":\"sparse_only|sparse_plus_dense|tie\","
@@ -165,4 +169,43 @@ def llm_judge_retrieval(
         instructions=instructions,
         payload=payload,
         max_output_tokens=500,
+    )
+
+
+def llm_score_retrieval(
+    *,
+    user_query: str,
+    retrieval_output: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Score a single retrieval output (no pairwise comparison)."""
+
+    instructions = (
+        "You are a strict retrieval evaluator for a fashion recommender. "
+        "You will score ONE retrieval output for the given user query. "
+        "Return valid JSON only. Do not include markdown.\n\n"
+        "Ignore explanation prose completely. "
+        "Judge ONLY structured evidence: item display_name, category, role, color, section_theme, and scores.\n\n"
+        "If llm_status indicates an LLM reranker was used, you may still judge the output, but focus on the outfit items.\n\n"
+        "Scoring rubric (0-5 each):\n"
+        "- relevance: matches the user intent (warm/cozy/polished/lightweight/etc.)\n"
+        "- constraint_fit: respects explicit constraints (category mentions, 'not X', office vs sporty, etc.)\n"
+        "- coherence: the outfit combinations make sense together\n"
+        "overall = relevance + constraint_fit + coherence (0-15)\n\n"
+        "Output JSON format:\n"
+        "{"
+        "\"scores\":{\"relevance\":0,\"constraint_fit\":0,\"coherence\":0,\"overall\":0},"
+        "\"reasons\":[\"...\"]"
+        "}"
+    )
+
+    payload = {
+        "task": "score_retrieval_output",
+        "user_query": user_query,
+        "retrieval_output": retrieval_output,
+    }
+    return _call_openai_json(
+        model=settings.openai_model_judge,
+        instructions=instructions,
+        payload=payload,
+        max_output_tokens=450,
     )
