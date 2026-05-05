@@ -90,6 +90,24 @@ Deliverable:
   - `answer`
   - `citations`
   - `sources`
+```text
+QA/
+├── data/
+│   ├── processed_articles/
+│   │   ├── fashion_qa_articles_clean.jsonl
+│   │   └── fashion_qa_chunks.jsonl
+│   ├── raw_articles/
+│   │   └── ... (raw article .txt files)
+│   ├── evaluation_qa_results.json
+│   └── url_list.json
+├── index/
+│   └── ... (vector index files)
+└── scripts/
+    ├── build_db.py
+    ├── evaluation_qa.py
+    ├── process_for_rag.py
+    ├── query_answer.py
+    └── web_scraping.py
 
 ### Track B: LLM + Personal Recommendation
 
