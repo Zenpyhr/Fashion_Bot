@@ -11,10 +11,14 @@ class Settings(BaseSettings):
     openai_reasoning_effort: str = "low"
     enable_openai_query_parser: bool = True
     enable_openai_reranker: bool = True
+    enable_dense_retrieval_rerank: bool = False
+    dense_shortlist_k_per_role: int = 200
+    dense_rerank_n_per_role: int = 50
     catalog_items_csv: str = "data/processed/catalog_items/catalog_items_demo.csv"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/fashion_bot"
     items_table: str = "items"
     article_chunks_table: str = "article_chunks"
+    catalog_item_embeddings_table: str = "catalog_item_embeddings"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

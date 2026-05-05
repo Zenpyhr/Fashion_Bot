@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.integrations.openai_client import openai_is_configured
 from src.recommender.outfits import build_outfits
+from src.shared.config import settings
 
 
 def main() -> None:
@@ -22,6 +23,7 @@ def main() -> None:
 
     print("LLM configured:", openai_is_configured())
     print("LLM status:", result.get("llm_status"))
+    print("Dense rerank enabled:", settings.enable_dense_retrieval_rerank)
     print("Query:", query)
     print()
     print("Parsed constraints:")

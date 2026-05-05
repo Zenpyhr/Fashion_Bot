@@ -5,7 +5,11 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from src.integrations.embeddings import embed_text_openai, l2_normalize
+from src.integrations.openai_client import openai_is_configured
+from src.integrations.pgvector_store import create_engine_from_settings, ensure_embeddings_table, fetch_embeddings
 from src.shared.config import settings
 
 ROLE_LIMITS = {
@@ -97,6 +101,68 @@ ROLE_CATEGORY_LIMITS = {
     "shoes": 2,
     "outerwear": 2,
 }
+
+
+def _infer_vector_dim() -> int:
+    model = settings.openai_embedding_model
+    if model == "text-embedding-3-small":
+        return 1536
+    if model == "text-embedding-3-large":
+        return 3072
+    raise RuntimeError(f"Unknown embedding dimension for model={model!r}.")
+
+
+@lru_cache(maxsize=1)
+def _get_embeddings_store():
+    engine = create_engine_from_settings()
+    table = ensure_embeddings_table(engine, vector_dim=_infer_vector_dim())
+    return engine, table
+
+
+def _dense_rerank_role_pool(role_df: pd.DataFrame, constraints: dict) -> pd.DataFrame:
+    """Dense rerank inside a sparse shortlist.
+
+    Assumes embeddings stored in Postgres are already L2-normalized.
+    """
+
+    if role_df.empty:
+        return role_df
+
+    query_text = (
+        constraints.get("semantic_query")
+        or constraints.get("raw_query")
+        or constraints.get("raw_text")
+        or ""
+    )
+    query_text = str(query_text).strip()
+    if not query_text:
+        return role_df
+
+    query_emb = l2_normalize(embed_text_openai(query_text))
+
+    engine, table = _get_embeddings_store()
+    item_ids = [str(item_id) for item_id in role_df["item_id"].tolist()]
+    emb_by_id = fetch_embeddings(engine, table, item_ids)
+
+    # Compute cosine similarity via dot product (vectors are normalized).
+    dense_scores = []
+    for item_id in item_ids:
+        emb = emb_by_id.get(str(item_id))
+        if not emb:
+            dense_scores.append(None)
+            continue
+        dense_scores.append(float(np.dot(query_emb, np.asarray(emb, dtype=np.float32))))
+
+    reranked = role_df.copy()
+    reranked["dense_score"] = dense_scores
+
+    # Prefer dense score when present, keep sparse score as tie-breaker.
+    reranked = reranked.sort_values(
+        by=["dense_score", "candidate_score", "normalized_category", "display_name"],
+        ascending=[False, False, True, True],
+        na_position="last",
+    )
+    return reranked
 
 
 @lru_cache(maxsize=1)
@@ -231,9 +297,24 @@ def retrieve_candidates_by_role(constraints: dict) -> dict[str, list[dict]]:
             ascending=[False, True, True],
         )
 
+        # Dense rerank should happen inside a larger sparse shortlist (funnel design).
+        shortlist_k = ROLE_LIMITS.get(role, 10)
+        if settings.enable_dense_retrieval_rerank:
+            shortlist_k = max(shortlist_k, settings.dense_shortlist_k_per_role)
+
+        role_shortlist = role_df.head(shortlist_k).copy()
+        if (
+            settings.enable_dense_retrieval_rerank
+            and openai_is_configured()
+        ):
+            role_shortlist = _dense_rerank_role_pool(role_shortlist, constraints)
+
         # Keep a small but category-diverse pool per role before outfit composition.
         limit = ROLE_LIMITS.get(role, 10)
-        diversified_role_df = _select_diverse_role_candidates(role_df, role, limit)
+        if settings.enable_dense_retrieval_rerank:
+            limit = max(limit, min(settings.dense_rerank_n_per_role, shortlist_k))
+
+        diversified_role_df = _select_diverse_role_candidates(role_shortlist, role, limit)
         candidate_rows = diversified_role_df.to_dict(orient="records")
         role_candidates[role] = candidate_rows
 

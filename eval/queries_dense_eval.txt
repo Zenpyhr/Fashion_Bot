@@ -1,0 +1,7 @@
+# Minimal eval query set for sparse vs dense rerank
+
+I want a warm casual jacket, not sporty
+Give me a relaxed but polished dinner outfit
+Build a clean office outfit, not too formal
+I want a lightweight summer outfit with sneakers
+Give me something cozy with a zip hoodie
