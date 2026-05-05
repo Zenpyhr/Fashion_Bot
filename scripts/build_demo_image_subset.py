@@ -29,6 +29,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--output-csv", type=Path, default=DEFAULT_FILTERED_CSV)
     parser.add_argument("--summary-json", type=Path, default=DEFAULT_SUMMARY_JSON)
+    parser.add_argument(
+        "--use-existing-subset",
+        action="store_true",
+        help="Use --output-csv as the selected item list instead of filtering --catalog-csv again.",
+    )
     parser.add_argument("--target-groups", nargs="*", default=["women"], help="Example: --target-groups women men")
     parser.add_argument("--roles", nargs="*", default=None, help="Example: --roles top bottom shoes outerwear")
     parser.add_argument("--categories", nargs="*", default=None, help="Example: --categories blouse shirt trousers skirt boots sneakers")
@@ -99,6 +104,16 @@ def filter_catalog(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
         filtered = pd.concat([filtered, remainder_df.head(extra_needed)], ignore_index=True)
 
     return filtered
+
+
+def attach_image_paths(df: pd.DataFrame, output_root: Path) -> pd.DataFrame:
+    """Add deterministic image paths for the H&M folder layout."""
+
+    enriched = df.copy()
+    enriched["item_id"] = enriched["item_id"].astype(str).str.zfill(10)
+    enriched["image_relative_path"] = enriched["item_id"].map(lambda item_id: str(expected_image_relative_path(item_id)))
+    enriched["image_path"] = enriched["image_relative_path"].map(lambda rel: str(output_root / rel))
+    return enriched
 
 
 def proportional_sample(df: pd.DataFrame, limit: int, group_column: str) -> pd.DataFrame:
@@ -213,6 +228,7 @@ def copy_images(filtered_df: pd.DataFrame, source_root: Path, output_root: Path)
     output_root.mkdir(parents=True, exist_ok=True)
 
     copied = 0
+    existing = 0
     missing = []
 
     for item_id in filtered_df["item_id"].drop_duplicates():
@@ -228,9 +244,13 @@ def copy_images(filtered_df: pd.DataFrame, source_root: Path, output_root: Path)
         if not target_path.exists():
             shutil.copy2(source_path, target_path)
             copied += 1
+        else:
+            existing += 1
 
     return {
+        "found_count": copied + existing,
         "copied_count": copied,
+        "existing_count": existing,
         "missing_count": len(missing),
         "missing_examples": missing[:25],
     }
@@ -260,16 +280,23 @@ def build_summary(filtered_df: pd.DataFrame, copy_result: dict, args: argparse.N
 def main() -> None:
     args = parse_args()
 
-    if not args.catalog_csv.exists():
-        raise FileNotFoundError(f"Catalog CSV not found: {args.catalog_csv}")
+    source_catalog_csv = args.output_csv if args.use_existing_subset else args.catalog_csv
+    if not source_catalog_csv.exists():
+        raise FileNotFoundError(f"Catalog CSV not found: {source_catalog_csv}")
     if not args.skip_image_copy and not args.source_root.exists():
         raise FileNotFoundError(f"Source image root not found: {args.source_root}")
+    args.catalog_csv = source_catalog_csv
 
-    df = pd.read_csv(args.catalog_csv, dtype={"item_id": "string"})
-    filtered_df = filter_catalog(df, args)
+    df = pd.read_csv(source_catalog_csv, dtype={"item_id": "string"})
+    if args.use_existing_subset:
+        filtered_df = attach_image_paths(df, args.output_root)
+    else:
+        filtered_df = filter_catalog(df, args)
     if args.skip_image_copy:
         copy_result = {
+            "found_count": 0,
             "copied_count": 0,
+            "existing_count": 0,
             "missing_count": 0,
             "missing_examples": [],
             "image_copy_skipped": True,
@@ -286,7 +313,11 @@ def main() -> None:
 
     print(f"Filtered rows: {len(filtered_df)}")
     print(f"Unique items: {filtered_df['item_id'].nunique()}")
+    if "found_count" in copy_result:
+        print(f"Found images: {copy_result['found_count']}")
     print(f"Copied images: {copy_result['copied_count']}")
+    if "existing_count" in copy_result:
+        print(f"Existing images: {copy_result['existing_count']}")
     print(f"Missing images: {copy_result['missing_count']}")
     print(f"Filtered CSV: {args.output_csv}")
     print(f"Summary JSON: {args.summary_json}")

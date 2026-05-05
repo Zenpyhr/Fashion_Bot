@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     openai_reasoning_effort: str = "low"
     enable_openai_query_parser: bool = True
     enable_openai_reranker: bool = True
+    catalog_items_csv: str = "data/processed/catalog_items/catalog_items_demo.csv"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/fashion_bot"
     items_table: str = "items"
     article_chunks_table: str = "article_chunks"

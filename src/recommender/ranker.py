@@ -39,9 +39,23 @@ def _select_diverse_outfits(outfits: list[dict], limit: int = 10) -> list[dict]:
         best_candidate = None
         best_adjusted_score = None
 
-        for candidate in remaining:
+        selected_signatures = {
+            tuple(str(item.get("normalized_category")) for item in outfit["items"])
+            for outfit in selected
+        }
+        novel_structure_candidates = [
+            candidate
+            for candidate in remaining
+            if tuple(str(item.get("normalized_category")) for item in candidate["items"]) not in selected_signatures
+        ]
+        candidate_pool = novel_structure_candidates or remaining
+
+        for candidate in candidate_pool:
             max_similarity = max(_outfit_similarity(candidate, chosen) for chosen in selected)
             adjusted_score = candidate["score"] - max_similarity
+
+            if tuple(str(item.get("normalized_category")) for item in candidate["items"]) in selected_signatures:
+                adjusted_score -= 20
 
             if best_adjusted_score is None or adjusted_score > best_adjusted_score:
                 best_adjusted_score = adjusted_score

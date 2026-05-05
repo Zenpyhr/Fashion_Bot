@@ -1,0 +1,102 @@
+[
+  {
+    "id": "q001",
+    "query": "Need a smart casual women's outfit in neutral colors for work",
+    "tags": ["women", "work", "smart_casual", "neutral"]
+  },
+  {
+    "id": "q002",
+    "query": "Give me a casual men's outfit in blue with sneakers",
+    "tags": ["men", "casual", "blue", "sneakers"]
+  },
+  {
+    "id": "q003",
+    "query": "I want a black jacket outfit for dinner",
+    "tags": ["women_default", "dinner", "black", "outerwear"]
+  },
+  {
+    "id": "q004",
+    "query": "Build a polished women's outfit for a meeting",
+    "tags": ["women", "work", "business"]
+  },
+  {
+    "id": "q005",
+    "query": "Give me an everyday men's outfit with dark colors",
+    "tags": ["men", "casual", "dark"]
+  },
+  {
+    "id": "q006",
+    "query": "Show me a casual women's outfit with white sneakers",
+    "tags": ["women", "casual", "white", "sneakers"]
+  },
+  {
+    "id": "q007",
+    "query": "I need a business casual men's outfit for the office",
+    "tags": ["men", "business", "office", "smart_casual"]
+  },
+  {
+    "id": "q008",
+    "query": "Create a beige and white women's outfit for dinner",
+    "tags": ["women", "dinner", "beige", "white"]
+  },
+  {
+    "id": "q009",
+    "query": "I want a relaxed men's outfit with shorts and sneakers",
+    "tags": ["men", "casual", "shorts", "sneakers"]
+  },
+  {
+    "id": "q010",
+    "query": "Give me a work outfit for women with a blazer",
+    "tags": ["women", "work", "blazer"]
+  },
+  {
+    "id": "q011",
+    "query": "Build a sporty men's outfit in black",
+    "tags": ["men", "sporty", "black"]
+  },
+  {
+    "id": "q012",
+    "query": "I need a simple neutral men's outfit for dinner",
+    "tags": ["men", "neutral", "dinner"]
+  },
+  {
+    "id": "q013",
+    "query": "Create a casual women's outfit in blue",
+    "tags": ["women", "casual", "blue"]
+  },
+  {
+    "id": "q014",
+    "query": "Give me a smart casual women's outfit with boots",
+    "tags": ["women", "smart_casual", "boots"]
+  },
+  {
+    "id": "q015",
+    "query": "I want a men's outfit for work in grey and black",
+    "tags": ["men", "work", "grey", "black"]
+  },
+  {
+    "id": "q016",
+    "query": "Make me a casual women's outfit with a jacket",
+    "tags": ["women", "casual", "outerwear"]
+  },
+  {
+    "id": "q017",
+    "query": "Show me a polished men's outfit with trousers",
+    "tags": ["men", "smart_casual", "trousers"]
+  },
+  {
+    "id": "q018",
+    "query": "I need a neutral women's outfit with black shoes",
+    "tags": ["women", "neutral", "black", "shoes"]
+  },
+  {
+    "id": "q019",
+    "query": "Give me a sporty women's outfit for everyday wear",
+    "tags": ["women", "sporty", "casual"]
+  },
+  {
+    "id": "q020",
+    "query": "Build a sharp men's dinner outfit with dark colors",
+    "tags": ["men", "dinner", "dark", "smart_casual"]
+  }
+]

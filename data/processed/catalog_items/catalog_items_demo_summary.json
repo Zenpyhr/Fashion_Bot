@@ -1,6 +1,6 @@
 {
-  "source_catalog_csv": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\processed\\catalog_items\\catalog_items_mvp.csv",
-  "source_images_root": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\raw\\hm\\images",
+  "source_catalog_csv": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\processed\\catalog_items\\catalog_items_demo.csv",
+  "source_images_root": "Images",
   "output_images_root": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\processed\\demo_images",
   "row_count": 5000,
   "unique_item_count": 5000,
@@ -33,8 +33,26 @@
     "waistcoat": 32,
     "outdoor_trousers": 2
   },
+  "found_count": 4984,
   "copied_count": 0,
-  "missing_count": 0,
-  "missing_examples": [],
-  "image_copy_skipped": true
+  "existing_count": 4984,
+  "missing_count": 16,
+  "missing_examples": [
+    "044\\0443262014.jpg",
+    "050\\0504960001.jpg",
+    "050\\0504960003.jpg",
+    "051\\0513701002.jpg",
+    "049\\0491912034.jpg",
+    "056\\0565481001.jpg",
+    "057\\0574528007.jpg",
+    "057\\0574528008.jpg",
+    "024\\0241602023.jpg",
+    "060\\0606301001.jpg",
+    "047\\0475791011.jpg",
+    "062\\0623935001.jpg",
+    "053\\0538358010.jpg",
+    "056\\0564373005.jpg",
+    "062\\0622220002.jpg",
+    "062\\0623498001.jpg"
+  ]
 }

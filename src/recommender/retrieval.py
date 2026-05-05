@@ -6,8 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
+from src.shared.config import settings
 
-CATALOG_PATH = Path("data/processed/catalog_items/catalog_items_mvp.csv")
 ROLE_LIMITS = {
     "top": 20,
     "bottom": 15,
@@ -103,9 +103,10 @@ ROLE_CATEGORY_LIMITS = {
 def load_catalog_items() -> pd.DataFrame:
     """Load the processed catalog once per process."""
 
-    if not CATALOG_PATH.exists():
-        raise FileNotFoundError(f"Processed catalog not found: {CATALOG_PATH}")
-    return pd.read_csv(CATALOG_PATH)
+    catalog_path = Path(settings.catalog_items_csv)
+    if not catalog_path.exists():
+        raise FileNotFoundError(f"Processed catalog not found: {catalog_path}")
+    return pd.read_csv(catalog_path)
 
 
 def _score_query_term_overlap(row: pd.Series, search_terms: list[str]) -> int:

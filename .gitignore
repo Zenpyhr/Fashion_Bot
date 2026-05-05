@@ -208,3 +208,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Large local datasets and generated image subsets
+data/raw/hm/images/
+data/raw/hm/images.zip
+data/raw/hm/*.zip
+data/processed/demo_images/
+Images/

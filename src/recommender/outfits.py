@@ -17,6 +17,8 @@ def _format_item_summary(item: dict) -> dict:
         "normalized_category": item["normalized_category"],
         "normalized_color": item["normalized_color"],
         "section_theme": item["section_theme"],
+        "image_path": item.get("image_path"),
+        "image_relative_path": item.get("image_relative_path"),
         "score": item.get("candidate_score"),
     }
 
@@ -54,6 +56,10 @@ def _outfit_signature(outfit: dict) -> tuple[tuple[str, str], ...]:
     )
 
 
+def _outfit_category_signature(outfit: dict) -> tuple[str, ...]:
+    return tuple(str(item.get("normalized_category")) for item in outfit["items"])
+
+
 def _outfit_similarity(left: dict, right: dict) -> int:
     left_signature = _outfit_signature(left)
     right_signature = _outfit_signature(right)
@@ -73,14 +79,27 @@ def _select_top_diverse_outfits(ranked_outfits: list[dict], limit: int = 3) -> l
 
     selected = [ranked_outfits[0]]
     remaining = ranked_outfits[1:]
+    selected_category_signatures = {_outfit_category_signature(ranked_outfits[0])}
 
     while remaining and len(selected) < limit:
         best_candidate = None
         best_adjusted_score = None
 
-        for candidate in remaining:
+        # Prefer outfits with a new role-category structure first. Only reuse the same
+        # structure when the shortlist truly offers no other viable direction.
+        novel_structure_candidates = [
+            candidate
+            for candidate in remaining
+            if _outfit_category_signature(candidate) not in selected_category_signatures
+        ]
+        candidate_pool = novel_structure_candidates or remaining
+
+        for candidate in candidate_pool:
             similarity_penalty = max(_outfit_similarity(candidate, chosen) for chosen in selected)
             adjusted_score = int(candidate.get("score", 0)) - similarity_penalty
+
+            if _outfit_category_signature(candidate) in selected_category_signatures:
+                adjusted_score -= 40
 
             if best_adjusted_score is None or adjusted_score > best_adjusted_score:
                 best_adjusted_score = adjusted_score
@@ -90,6 +109,7 @@ def _select_top_diverse_outfits(ranked_outfits: list[dict], limit: int = 3) -> l
             break
 
         selected.append(best_candidate)
+        selected_category_signatures.add(_outfit_category_signature(best_candidate))
         remaining = [candidate for candidate in remaining if candidate is not best_candidate]
 
     return selected
