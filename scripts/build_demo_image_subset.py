@@ -63,6 +63,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def to_repo_relative_path(path: Path) -> str:
+    """Return a portable path relative to the project root when possible."""
+
+    try:
+        return path.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def expected_image_relative_path(item_id: str) -> Path:
     prefix = item_id[:3]
     return Path(prefix) / f"{item_id}.jpg"
@@ -86,7 +95,9 @@ def filter_catalog(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
     base_filtered = filtered.copy()
     filtered["item_id"] = filtered["item_id"].astype(str).str.zfill(10)
     filtered["image_relative_path"] = filtered["item_id"].map(lambda item_id: str(expected_image_relative_path(item_id)))
-    filtered["image_path"] = filtered["image_relative_path"].map(lambda rel: str(args.output_root / rel))
+    filtered["image_path"] = filtered["image_relative_path"].map(
+        lambda rel: to_repo_relative_path(args.output_root / rel)
+    )
     if args.limit is not None and len(filtered) > args.limit:
         if args.sampling_strategy == "balanced":
             filtered = balanced_sample(filtered, args.limit)
@@ -112,7 +123,7 @@ def attach_image_paths(df: pd.DataFrame, output_root: Path) -> pd.DataFrame:
     enriched = df.copy()
     enriched["item_id"] = enriched["item_id"].astype(str).str.zfill(10)
     enriched["image_relative_path"] = enriched["item_id"].map(lambda item_id: str(expected_image_relative_path(item_id)))
-    enriched["image_path"] = enriched["image_relative_path"].map(lambda rel: str(output_root / rel))
+    enriched["image_path"] = enriched["image_relative_path"].map(lambda rel: to_repo_relative_path(output_root / rel))
     return enriched
 
 

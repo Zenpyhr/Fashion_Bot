@@ -9,7 +9,19 @@ from src.recommender.retrieval import retrieve_candidates_by_role
 from src.shared.config import settings
 
 
+def _image_url_from_path(image_path: str | None) -> str | None:
+    if not image_path:
+        return None
+
+    normalized_path = image_path.replace("\\", "/")
+    prefix = "data/processed/demo_images/"
+    if normalized_path.startswith(prefix):
+        return f"/demo_images/{normalized_path.removeprefix(prefix)}"
+    return None
+
+
 def _format_item_summary(item: dict) -> dict:
+    image_path = item.get("image_path")
     return {
         "item_id": item["item_id"],
         "display_name": item["display_name"],
@@ -17,7 +29,8 @@ def _format_item_summary(item: dict) -> dict:
         "normalized_category": item["normalized_category"],
         "normalized_color": item["normalized_color"],
         "section_theme": item["section_theme"],
-        "image_path": item.get("image_path"),
+        "image_path": image_path,
+        "image_url": _image_url_from_path(image_path),
         "image_relative_path": item.get("image_relative_path"),
         "score": item.get("candidate_score"),
     }

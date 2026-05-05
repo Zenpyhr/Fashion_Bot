@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fashion Bot</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace" aria-label="Outfit recommender">
+        <div class="query-panel">
+          <p class="eyebrow">Fashion Bot</p>
+          <h1>Build a look from the demo catalog</h1>
+          <form id="recommend-form" class="query-form">
+            <label for="query">Style request</label>
+            <div class="query-row">
+              <input
+                id="query"
+                name="query"
+                type="text"
+                autocomplete="off"
+                value="Give me a casual men's outfit in blue with sneakers"
+              />
+              <button type="submit">Recommend</button>
+            </div>
+          </form>
+          <div class="prompt-row" aria-label="Example prompts">
+            <button type="button" data-prompt="Give me a casual men's outfit in blue with sneakers">Blue casual</button>
+            <button type="button" data-prompt="Build a sharp men's dinner outfit with dark colors">Dinner</button>
+            <button type="button" data-prompt="Need a smart casual men's outfit for work">Work</button>
+            <button type="button" data-prompt="I want a relaxed men's outfit with shorts and sneakers">Weekend</button>
+          </div>
+          <p id="status" class="status" role="status">Ready</p>
+        </div>
+
+        <section id="results" class="results" aria-live="polite"></section>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
