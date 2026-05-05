@@ -108,6 +108,7 @@ QA/
     ├── build_db.py
     ├── query_answer.py
     └── evaluation_qa.py
+```
 
 ### `web_scraping.py`
 - Reads URL groups from `data/url_list.json`.
