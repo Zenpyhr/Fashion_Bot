@@ -135,7 +135,7 @@ QA/
 
 #### `evaluation_qa.py`
 - Runs a fixed set of test questions.
-- Evaluates retrieval coverage (did we retrieve expected scope content).
+- Evaluates retrieval coverage by measuring recall@k (did we retrieve expected scope content).
 - Uses an LLM judge to score whether answers are supported by retrieved evidence.
 - Prints per-case results and an overall summary.
 
