@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Fashion Bot</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=6" />
   </head>
   <body>
     <main class="shell">
@@ -14,15 +14,32 @@
           <h1>Build a look from the demo catalog</h1>
           <details class="wardrobe-panel" open>
             <summary>Add wardrobe photo (demo)</summary>
-            <form id="wardrobe-upload-form" class="query-form">
-              <label for="wardrobe-user-id">User id</label>
-              <input id="wardrobe-user-id" name="user_id" type="text" value="demo_user" />
-              <label for="wardrobe-image">Wardrobe image</label>
-              <input id="wardrobe-image" name="image" type="file" accept="image/*" />
-              <div class="query-row">
-                <button id="wardrobe-upload-btn" type="button">Upload to wardrobe</button>
-                <button id="wardrobe-clear" type="button">Clear wardrobe</button>
+            <form id="wardrobe-upload-form" class="wardrobe-form">
+              <div class="wardrobe-grid">
+                <div class="field">
+                  <label for="wardrobe-user-id">User id</label>
+                  <input
+                    id="wardrobe-user-id"
+                    name="user_id"
+                    type="text"
+                    value="demo_user"
+                    placeholder="e.g. demo_user"
+                    autocomplete="off"
+                  />
+                  <p class="hint">Used to store and retrieve your wardrobe items.</p>
+                </div>
+
+                <div class="field">
+                  <label for="wardrobe-image">Wardrobe image</label>
+                  <input id="wardrobe-image" name="image" type="file" accept="image/*" />
+                  <p class="hint">Upload a clear clothing photo on a plain background for best results.</p>
+                  <div class="wardrobe-actions">
+                    <button id="wardrobe-upload-btn" class="btn primary" type="button">Upload</button>
+                    <button id="wardrobe-clear" class="btn subtle" type="button">Clear wardrobe</button>
+                  </div>
+                </div>
               </div>
+
               <p id="wardrobe-status" class="status" role="status">Wardrobe ready</p>
             </form>
           </details>
@@ -51,6 +68,6 @@
         <section id="results" class="results" aria-live="polite"></section>
       </section>
     </main>
-    <script src="/static/app.js?v=4"></script>
+    <script src="/static/app.js?v=5"></script>
   </body>
 </html>
