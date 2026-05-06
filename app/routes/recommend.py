@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.post("", response_model=RecommendationResponse)
 def recommend_outfit(payload: RecommendationRequest) -> RecommendationResponse:
-    result = build_outfits(payload.user_query)
+    result = build_outfits(payload.user_query, user_id=payload.user_id)
     return RecommendationResponse(
         parsed_constraints=result["parsed_constraints"],
         outfits=result["outfits"],

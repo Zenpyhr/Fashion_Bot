@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from src.integrations.openai_client import llm_compose_outfits, llm_rerank_outfits, openai_is_configured
 from src.recommender.query_parser import parse_user_query
 from src.recommender.ranker import rank_outfits, score_outfit_items
@@ -14,9 +16,18 @@ def _image_url_from_path(image_path: str | None) -> str | None:
         return None
 
     normalized_path = image_path.replace("\\", "/")
-    prefix = "data/processed/demo_images/"
-    if normalized_path.startswith(prefix):
-        return f"/demo_images/{normalized_path.removeprefix(prefix)}"
+    # Support both relative paths (preferred) and absolute paths on Windows/macOS.
+    demo_prefix = "data/processed/demo_images/"
+    if normalized_path.startswith(demo_prefix):
+        return f"/demo_images/{normalized_path.removeprefix(demo_prefix)}"
+    if f"/{demo_prefix}" in normalized_path:
+        return f"/demo_images/{normalized_path.split(f'/{demo_prefix}', 1)[1]}"
+
+    wardrobe_prefix = "data/user_wardrobe/"
+    if normalized_path.startswith(wardrobe_prefix):
+        return f"/user_wardrobe/{normalized_path.removeprefix(wardrobe_prefix)}"
+    if f"/{wardrobe_prefix}" in normalized_path:
+        return f"/user_wardrobe/{normalized_path.split(f'/{wardrobe_prefix}', 1)[1]}"
     return None
 
 
@@ -378,7 +389,7 @@ def _apply_llm_explanations_to_selected_outfits(
     return updated_outfits
 
 
-def build_outfits(user_query: str) -> dict:
+def build_outfits(user_query: str, *, user_id: str | None = None) -> dict:
     """Parse query, retrieve role candidates, and return the top outfit suggestions."""
 
     # Orchestrator for the MVP recommender:
@@ -386,7 +397,48 @@ def build_outfits(user_query: str) -> dict:
     # 2) retrieve item pools per role
     # 3) combine and rank outfits (deterministic product, or grounded LLM compose when enabled)
     constraints = parse_user_query(user_query)
+    if user_id:
+        constraints["user_id"] = user_id
     candidates_by_role = retrieve_candidates_by_role(constraints)
+
+    # Merge user wardrobe items (if provided) and gently prioritize them.
+    user_id = constraints.get("user_id")  # optionally injected by API layer later
+    if user_id:
+        try:
+            from sqlalchemy.exc import SQLAlchemyError
+            from src.database.wardrobe_store import (
+                create_engine_from_settings as _wardrobe_engine,
+                ensure_wardrobe_items_table as _wardrobe_table,
+                fetch_wardrobe_items_for_user,
+            )
+
+            engine = _wardrobe_engine()
+            table = _wardrobe_table(engine)
+            wardrobe_items = fetch_wardrobe_items_for_user(engine, table, user_id=user_id)
+
+            WARDROBE_BOOST = 8
+            for item in wardrobe_items:
+                role = str(item.get("recommendation_role") or "")
+                if not role:
+                    continue
+                if role not in candidates_by_role:
+                    continue
+
+                boosted = dict(item)
+                # Wardrobe items do not have sparse candidate_score; give them a baseline + boost.
+                boosted["candidate_score"] = int(boosted.get("candidate_score") or 10) + WARDROBE_BOOST
+                candidates_by_role[role] = [boosted] + candidates_by_role[role]
+            constraints["wardrobe_status"] = "ok"
+        except SQLAlchemyError as exc:
+            # Wardrobe is optional; keep baseline recommender working if DB is unavailable.
+            logging.warning("Wardrobe DB unavailable for user_id=%s: %s", user_id, exc)
+            constraints["wardrobe_status"] = "db_error"
+            constraints["wardrobe_error"] = str(exc)
+        except Exception as exc:
+            # Don't hide unexpected bugs; surface them in the response + logs.
+            logging.exception("Unexpected wardrobe merge failure for user_id=%s", user_id)
+            constraints["wardrobe_status"] = "unexpected_error"
+            constraints["wardrobe_error"] = str(exc)
 
     combo_builder_source = "deterministic"
     ranked_outfits = _try_llm_compose_outfits(user_query, constraints, candidates_by_role)

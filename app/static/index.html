@@ -12,6 +12,20 @@
         <div class="query-panel">
           <p class="eyebrow">Fashion Bot</p>
           <h1>Build a look from the demo catalog</h1>
+          <details class="wardrobe-panel" open>
+            <summary>Add wardrobe photo (demo)</summary>
+            <form id="wardrobe-upload-form" class="query-form">
+              <label for="wardrobe-user-id">User id</label>
+              <input id="wardrobe-user-id" name="user_id" type="text" value="demo_user" />
+              <label for="wardrobe-image">Wardrobe image</label>
+              <input id="wardrobe-image" name="image" type="file" accept="image/*" />
+              <div class="query-row">
+                <button id="wardrobe-upload-btn" type="button">Upload to wardrobe</button>
+                <button id="wardrobe-clear" type="button">Clear wardrobe</button>
+              </div>
+              <p id="wardrobe-status" class="status" role="status">Wardrobe ready</p>
+            </form>
+          </details>
           <form id="recommend-form" class="query-form">
             <label for="query">Style request</label>
             <div class="query-row">
@@ -37,6 +51,6 @@
         <section id="results" class="results" aria-live="polite"></section>
       </section>
     </main>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
   </body>
 </html>

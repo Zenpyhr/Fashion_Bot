@@ -19,6 +19,8 @@ The QA/RAG track may also use OpenAI or other models via LangChain in `QA/script
 
 **The recommendation core remains metadata-first with deterministic fallbacks**, so it keeps working if the API key is missing or specific flags are turned off.
 
+Step-by-step **parse → retrieve → compose → rerank → explain** reference for Track B lives in **`RECOMMENDER_PIPELINE.md`** (recommended when you revisit the codebase after a break).
+
 ---
 
 ## Why local `.env` and `requirements.txt`
@@ -436,6 +438,52 @@ For demos, `catalog_items_demo.csv` is also used—set **`CATALOG_ITEMS_CSV`** i
 
 ---
 
+## Wardrobe (user-owned clothes)
+
+The recommender supports a per-user wardrobe stored in Postgres. Users can upload photos, the backend tags them with a vision model, stores metadata in `wardrobe_items`, and then **mixes wardrobe items with the public catalog** during `/recommend`.
+
+Key idea:
+
+- `user_id` controls **which wardrobe you write to** (upload) and **which wardrobe you read from** (recommend).
+- The public catalog is still used unless you intentionally build a wardrobe-only mode.
+
+### API endpoints
+
+- **Upload one wardrobe image**: `POST /wardrobe/upload`
+  - multipart form fields: `user_id` (string), `image` (file)
+  - returns `wardrobe_item_id` (content-hash based)
+- **Clear wardrobe** (DB rows for that user): `POST /wardrobe/clear`
+  - form field: `user_id`
+  - returns `deleted` count
+
+### Image IDs and separating from catalog items
+
+Wardrobe `item_id` is generated from the uploaded image bytes:
+
+- `content_hash = sha256(file_bytes)`
+- `wardrobe_item_id = content_hash[:16]`
+
+This keeps wardrobe IDs stable and avoids collisions with H&M/catalog numeric IDs.
+
+### Serving wardrobe images
+
+Wardrobe images are staged under:
+
+- `data/user_wardrobe/<user_id>/uploads/<wardrobe_item_id>.<ext>`
+
+FastAPI serves that folder at:
+
+- `/user_wardrobe/...`
+
+### Frontend demo
+
+The demo UI at `/` includes a small panel to:
+
+- upload a wardrobe image for a `user_id`
+- clear the wardrobe for a `user_id`
+
+The UI also includes `user_id` in `/recommend` requests so you can see wardrobe items appear in results.
+
 ## Evaluation
 
 ### Recommender / retrieval (current scripts)
@@ -468,5 +516,6 @@ use those as documented in older notes; otherwise prefer **`run_retrieval_eval.p
 2. `pip install -r requirements.txt`.
 3. Copy `.env.example` → `.env` and set `OPENAI_API_KEY` (and `DATABASE_URL` if using Docker Postgres).
 4. Run `python scripts\run_api.py` and exercise `POST /recommend`.
-5. (Optional) `docker compose up -d`, `python scripts\build_catalog_embeddings.py`, then enable dense retrieval in `.env`.
-6. Continue improving parsing, retrieval, and outfit quality using `eval/` runs.
+5. Optional: open `http://127.0.0.1:8000/` and use the Wardrobe panel to upload an image for `demo_user`, then run recommendations to see wardrobe items appear.
+6. (Optional) `docker compose up -d`, `python scripts\build_catalog_embeddings.py`, then enable dense retrieval in `.env`.
+7. Continue improving parsing, retrieval, and outfit quality using `eval/` runs.
