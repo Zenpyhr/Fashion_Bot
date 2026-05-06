@@ -2,7 +2,7 @@
 # Includes every package from the original one-block requirements.txt, plus numpy
 # (explicit; used by src/recommender/retrieval.py — also pulled in by pandas).
 #
-# Track A (QA/scripts): may need extra installs — requests, beautifulsoup4, langchain_*, etc.
+# Track A (src/qa/scripts): may need extra installs — requests, beautifulsoup4, langchain_*, etc.
 
 # --- API & app ---
 fastapi>=0.115.0

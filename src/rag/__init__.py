@@ -1,1 +1,0 @@
-"""Fashion QA RAG pipeline."""

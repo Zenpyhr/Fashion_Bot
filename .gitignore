@@ -219,3 +219,6 @@ Images/
 # Eval artifacts (large, local outputs)
 eval/artifacts/
 eval/artifacts/**/*.json
+
+# QA / RAG artifacts (Chroma persisted DB)
+data/qa/index/

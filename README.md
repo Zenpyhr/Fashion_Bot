@@ -15,7 +15,7 @@ The project uses **OpenAI** as the main LLM/embedding backend for the recommenda
 - Outfit reranking and explanation text (when enabled)
 - Embedding API for **dense retrieval** / catalog vector build (when enabled)
 
-The QA/RAG track may also use OpenAI or other models via LangChain in `QA/scripts/` (see Track A).
+The QA/RAG track may also use OpenAI or other models via LangChain in `src/qa/scripts/` (see Track A).
 
 **The recommendation core remains metadata-first with deterministic fallbacks**, so it keeps working if the API key is missing or specific flags are turned off.
 
@@ -63,7 +63,7 @@ pip install -r requirements.txt
 ### Root `requirements.txt`
 
 The file at the repo root installs **FastAPI**, **recommender stack** (pandas, numpy, SQLAlchemy, psycopg, pgvector), **OpenAI SDK**, and **pytest**.  
-**Track A** scripts under `QA/scripts/` may require **additional** packages (e.g. `requests`, `beautifulsoup4`, LangChain, Chroma)—install those when you work on that track (see imports in those scripts).
+**Track A** scripts under `src/qa/scripts/` may require **additional** packages (e.g. `requests`, `beautifulsoup4`, LangChain, Chroma)—install those when you work on that track (see imports in those scripts).
 
 ### Team setup checklist
 
@@ -196,23 +196,25 @@ Deliverable:
   - `sources`
 
 ```text
-QA/
-├── data/
-│   ├── processed_articles/
-│   │   ├── fashion_qa_articles_clean.jsonl
-│   │   └── fashion_qa_chunks.jsonl
-│   ├── raw_articles/
-│   │   └── ... (raw article .txt files)
-│   ├── evaluation_qa_results.json
-│   └── url_list.json
-├── index/
-│   └── ... (vector index files)
-└── scripts/
-    ├── web_scraping.py
-    ├── process_for_rag.py
-    ├── build_db.py
-    ├── query_answer.py
-    └── evaluation_qa.py
+data/qa/
+├── processed_articles/
+│   ├── fashion_qa_articles_clean.jsonl
+│   └── fashion_qa_chunks.jsonl
+├── raw_articles/
+│   └── ... (raw article .txt files)
+├── url_list.json
+└── index/
+    └── ... (vector index files)
+
+src/qa/scripts/
+├── web_scraping.py
+├── process_for_rag.py
+├── build_db.py
+└── query_answer.py
+
+scripts/
+├── qa_build_db.py
+└── qa_answer.py
 ```
 
 #### `web_scraping.py`
@@ -233,7 +235,7 @@ QA/
 
 - Loads processed chunk records.
 - Converts chunks into embeddings.
-- Stores embeddings + metadata in Chroma vector DB under `index/fashion_chroma_db`.
+- Stores embeddings + metadata in Chroma vector DB under `data/qa/index/fashion_chroma_db`.
 
 #### `query_answer.py`
 
@@ -413,7 +415,7 @@ Fashion_Bot/
 │   └── artifacts/
 ├── tests/
 ├── scripts/
-└── QA/
+└── data/
 ```
 
 (Not every folder may exist in your clone; treat this as the target layout.)
