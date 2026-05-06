@@ -1,13 +1,13 @@
-"""Run a quantitative evaluation suite over multiple system variants.
+"""Run a quantitative evaluation suite over multiple recommender variants.
 
 Writes a clean folder under:
   eval/recommender_eval/artifacts/suites/<timestamp>/
 
-Variants (minimal ablation):
-  - baseline_det
-  - parser_only
-  - parser_plus_dense
-  - wardrobe_on (parser_plus_dense + user_id=demo_user)
+Primary wardrobe benchmark variants:
+  - catalog_sparse
+  - catalog_dense
+  - wardrobe_sparse
+  - wardrobe_dense
 
 This script produces:
   - run.json (raw outputs)
@@ -38,28 +38,39 @@ from src.recommender.outfits import build_outfits
 from src.shared.config import settings
 
 
-def _load_queries_txt(path: Path) -> list[str]:
-    queries: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+def _load_queries_txt(path: Path) -> list[dict[str, Any]]:
+    queries: list[dict[str, Any]] = []
+    for index, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        queries.append(line)
+        queries.append({"id": f"txt_{index:03d}", "query": line, "tags": []})
     return queries
 
 
-def _load_queries_benchmark_json(path: Path) -> list[dict[str, Any]]:
+def _load_queries_json(path: Path) -> list[dict[str, Any]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
-        raise ValueError("benchmark_queries.json must be a list of {id, query, tags}.")
+        raise ValueError(f"{path.name} must be a list of query objects.")
+
     out: list[dict[str, Any]] = []
     for row in payload:
         if not isinstance(row, dict):
             continue
-        q = str(row.get("query") or "").strip()
-        if not q:
+        query_text = str(row.get("query") or "").strip()
+        if not query_text:
             continue
-        out.append({"id": row.get("id"), "query": q, "tags": row.get("tags") or []})
+        out.append(
+            {
+                "id": str(row.get("id") or ""),
+                "query": query_text,
+                "tags": row.get("tags") or [],
+                "bucket": str(row.get("bucket") or "").strip() or None,
+                "expected_wardrobe_use": str(row.get("expected_wardrobe_use") or "").strip() or None,
+                "anchor_category": str(row.get("anchor_category") or "").strip() or None,
+                "anchor_color": str(row.get("anchor_color") or "").strip() or None,
+            }
+        )
     return out
 
 
@@ -101,28 +112,28 @@ def _safe_list(x) -> list:
 def _roles_present(outfit: dict) -> set[str]:
     roles = set()
     for item in _safe_list(outfit.get("items")):
-        r = str(item.get("role") or "").strip()
-        if r:
-            roles.add(r)
+        role = str(item.get("role") or "").strip()
+        if role:
+            roles.add(role)
     return roles
 
 
-def _colors_present(outfit: dict) -> list[str]:
-    colors: list[str] = []
+def _colors_present(outfit: dict) -> set[str]:
+    colors = set()
     for item in _safe_list(outfit.get("items")):
-        c = item.get("normalized_color")
-        if c:
-            colors.append(str(c).lower())
+        color = item.get("normalized_color")
+        if color:
+            colors.add(str(color).lower())
     return colors
 
 
 def _categories_present(outfit: dict) -> set[str]:
-    cats = set()
+    categories = set()
     for item in _safe_list(outfit.get("items")):
-        c = item.get("normalized_category")
-        if c:
-            cats.add(str(c).lower())
-    return cats
+        category = item.get("normalized_category")
+        if category:
+            categories.add(str(category).lower())
+    return categories
 
 
 def _wardrobe_count(outfit: dict) -> int:
@@ -133,110 +144,94 @@ def _wardrobe_count(outfit: dict) -> int:
     return count
 
 
-def _shared_item_ids(outfits: list[dict]) -> int:
-    seen = set()
-    dupes = 0
-    for outfit in outfits:
-        for item in _safe_list(outfit.get("items")):
-            item_id = item.get("item_id")
-            if item_id is None:
-                continue
-            item_id = str(item_id)
-            if item_id in seen:
-                dupes += 1
-            else:
-                seen.add(item_id)
-    return dupes
-
-
-def _compute_metrics_for_query(query: str, summary: dict, *, user_id: str | None) -> dict[str, Any]:
+def _compute_metrics_for_query(query_row: dict[str, Any], summary: dict, *, user_id: str | None) -> dict[str, Any]:
     parsed = summary.get("parsed_constraints") or {}
-    required_roles = [str(r) for r in _safe_list(parsed.get("required_roles"))]
-    preferred_colors = [str(c).lower() for c in _safe_list(parsed.get("preferred_colors")) if str(c).strip()]
-    preferred_categories = [str(c).lower() for c in _safe_list(parsed.get("preferred_categories")) if str(c).strip()]
+    required_roles = [str(role) for role in _safe_list(parsed.get("required_roles"))]
+    preferred_categories = [str(cat).lower() for cat in _safe_list(parsed.get("preferred_categories")) if str(cat).strip()]
 
     outfits = _safe_list(summary.get("top_outfits"))
     top1 = outfits[0] if outfits else {}
-    top3 = outfits[:3] if outfits else []
 
     roles_top1 = _roles_present(top1)
-    missing_roles_top1 = [r for r in required_roles if r not in roles_top1]
-
-    colors_top1 = _colors_present(top1)
     categories_top1 = _categories_present(top1)
+    colors_top1 = _colors_present(top1)
 
-    color_any_hit_top1 = None
-    color_majority_hit_top1 = None
-    if preferred_colors:
-        color_any_hit_top1 = any(c in preferred_colors for c in colors_top1)
-        if colors_top1:
-            hits = sum(1 for c in colors_top1 if c in preferred_colors)
-            color_majority_hit_top1 = hits >= ((len(colors_top1) // 2) + 1)
-        else:
-            color_majority_hit_top1 = False
+    missing_roles_top1 = [role for role in required_roles if role not in roles_top1]
+
+    anchor_category = str(query_row.get("anchor_category") or "").strip().lower() or None
+    anchor_color = str(query_row.get("anchor_color") or "").strip().lower() or None
+    expected_wardrobe_use = str(query_row.get("expected_wardrobe_use") or "").strip().lower() or None
+    bucket = str(query_row.get("bucket") or "").strip().lower() or None
 
     category_any_hit_top1 = None
-    if preferred_categories:
-        category_any_hit_top1 = any(c in categories_top1 for c in preferred_categories)
-
-    signatures = [str(o.get("signature") or "") for o in top3]
-    duplicate_signature_in_top3 = len(set(signatures)) != len(signatures) if signatures else False
-    shared_item_ids_in_top3 = _shared_item_ids(top3) > 0
+    if anchor_category:
+        category_any_hit_top1 = anchor_category in categories_top1
+    elif preferred_categories:
+        category_any_hit_top1 = any(category in categories_top1 for category in preferred_categories)
 
     wardrobe_hit_at_1 = None
-    wardrobe_hit_at_3 = None
-    wardrobe_items_per_outfit_top3_mean = None
-    if user_id:
+    if user_id and expected_wardrobe_use == "yes":
         wardrobe_hit_at_1 = _wardrobe_count(top1) > 0
-        wardrobe_hit_at_3 = any(_wardrobe_count(o) > 0 for o in top3)
-        if top3:
-            wardrobe_items_per_outfit_top3_mean = statistics.mean([_wardrobe_count(o) for o in top3])
+
+    wardrobe_constraint_override = None
+    if user_id and expected_wardrobe_use == "yes" and _wardrobe_count(top1) > 0:
+        category_miss = category_any_hit_top1 is False
+        color_miss = bool(anchor_color) and (anchor_color not in colors_top1)
+        wardrobe_constraint_override = category_miss or color_miss
+
+    negative_control_wardrobe_intrusion = None
+    if user_id and expected_wardrobe_use == "no":
+        negative_control_wardrobe_intrusion = _wardrobe_count(top1) > 0
 
     return {
-        "query": query,
+        "id": query_row.get("id"),
+        "query": query_row.get("query"),
+        "bucket": bucket,
+        "expected_wardrobe_use": expected_wardrobe_use,
+        "anchor_category": anchor_category,
+        "anchor_color": anchor_color,
         "user_id": user_id,
         "required_roles": required_roles,
         "missing_roles_top1": missing_roles_top1,
         "role_complete_top1": len(missing_roles_top1) == 0 if required_roles else None,
-        "preferred_colors": preferred_colors,
-        "color_any_hit_top1": color_any_hit_top1,
-        "color_majority_hit_top1": color_majority_hit_top1,
-        "preferred_categories": preferred_categories,
         "category_any_hit_top1": category_any_hit_top1,
-        "top3_duplicate_signature": duplicate_signature_in_top3,
-        "top3_shared_item_ids": shared_item_ids_in_top3,
         "wardrobe_hit_at_1": wardrobe_hit_at_1,
-        "wardrobe_hit_at_3": wardrobe_hit_at_3,
-        "wardrobe_items_per_outfit_top3_mean": wardrobe_items_per_outfit_top3_mean,
+        "wardrobe_constraint_override": wardrobe_constraint_override,
+        "negative_control_wardrobe_intrusion": negative_control_wardrobe_intrusion,
     }
 
 
 def _aggregate_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    def rate_bool(key: str) -> float | None:
-        vals = [r.get(key) for r in rows if r.get(key) is not None]
-        if not vals:
+    def rate_bool(key: str, *, bucket: str | None = None) -> float | None:
+        values = []
+        for row in rows:
+            if bucket is not None and row.get("bucket") != bucket:
+                continue
+            value = row.get(key)
+            if value is not None:
+                values.append(bool(value))
+        if not values:
             return None
-        return sum(1 for v in vals if bool(v)) / len(vals)
+        return sum(1 for value in values if value) / len(values)
 
-    missing_role_counts = [len(r.get("missing_roles_top1") or []) for r in rows]
+    missing_role_counts = [len(row.get("missing_roles_top1") or []) for row in rows]
     return {
         "count": len(rows),
         "role_complete_top1_rate": rate_bool("role_complete_top1"),
         "mean_missing_roles_top1": statistics.mean(missing_role_counts) if missing_role_counts else None,
-        "color_any_hit_top1_rate": rate_bool("color_any_hit_top1"),
-        "color_majority_hit_top1_rate": rate_bool("color_majority_hit_top1"),
         "category_any_hit_top1_rate": rate_bool("category_any_hit_top1"),
-        "top3_duplicate_signature_rate": rate_bool("top3_duplicate_signature"),
-        "top3_shared_item_ids_rate": rate_bool("top3_shared_item_ids"),
         "wardrobe_hit_at_1_rate": rate_bool("wardrobe_hit_at_1"),
-        "wardrobe_hit_at_3_rate": rate_bool("wardrobe_hit_at_3"),
-        "wardrobe_items_per_outfit_top3_mean": (
-            statistics.mean(
-                [r["wardrobe_items_per_outfit_top3_mean"] for r in rows if r.get("wardrobe_items_per_outfit_top3_mean") is not None]
-            )
-            if any(r.get("wardrobe_items_per_outfit_top3_mean") is not None for r in rows)
-            else None
-        ),
+        "wardrobe_constraint_override_rate": rate_bool("wardrobe_constraint_override"),
+        "negative_control_wardrobe_intrusion_rate": rate_bool("negative_control_wardrobe_intrusion"),
+        "bucket_counts": {
+            "positive": sum(1 for row in rows if row.get("bucket") == "positive"),
+            "mix": sum(1 for row in rows if row.get("bucket") == "mix"),
+            "negative_control": sum(1 for row in rows if row.get("bucket") == "negative_control"),
+        },
+        "judge_reporting_scopes": {
+            "wardrobe_hit_scope": "positive+mix only",
+            "negative_control_scope": "negative_control only",
+        },
     }
 
 
@@ -251,32 +246,32 @@ class Variant:
 
 
 VARIANTS: dict[str, Variant] = {
-    "baseline_det": Variant(
-        name="baseline_det",
-        enable_openai_query_parser=False,
-        enable_dense_retrieval_rerank=False,
-        enable_openai_combo_composer=False,
-        enable_openai_reranker=False,
-        user_id=None,
-    ),
-    "parser_only": Variant(
-        name="parser_only",
+    "catalog_sparse": Variant(
+        name="catalog_sparse",
         enable_openai_query_parser=True,
         enable_dense_retrieval_rerank=False,
         enable_openai_combo_composer=False,
         enable_openai_reranker=False,
         user_id=None,
     ),
-    "parser_plus_dense": Variant(
-        name="parser_plus_dense",
+    "catalog_dense": Variant(
+        name="catalog_dense",
         enable_openai_query_parser=True,
         enable_dense_retrieval_rerank=True,
         enable_openai_combo_composer=False,
         enable_openai_reranker=False,
         user_id=None,
     ),
-    "wardrobe_on": Variant(
-        name="wardrobe_on",
+    "wardrobe_sparse": Variant(
+        name="wardrobe_sparse",
+        enable_openai_query_parser=True,
+        enable_dense_retrieval_rerank=False,
+        enable_openai_combo_composer=False,
+        enable_openai_reranker=False,
+        user_id="demo_user",
+    ),
+    "wardrobe_dense": Variant(
+        name="wardrobe_dense",
         enable_openai_query_parser=True,
         enable_dense_retrieval_rerank=True,
         enable_openai_combo_composer=False,
@@ -302,8 +297,8 @@ def _run_variant(variant: Variant, queries: list[dict[str, Any]]) -> dict[str, A
         metrics_rows = []
         timings = []
 
-        for q in queries:
-            query_text = str(q["query"])
+        for query_row in queries:
+            query_text = str(query_row["query"])
             t0 = time.time()
             api_result = build_outfits(query_text, user_id=variant.user_id)
             elapsed_ms = int((time.time() - t0) * 1000)
@@ -312,14 +307,18 @@ def _run_variant(variant: Variant, queries: list[dict[str, Any]]) -> dict[str, A
             summary = _summarize_api_result(api_result)
             items.append(
                 {
-                    "id": q.get("id"),
+                    "id": query_row.get("id"),
                     "query": query_text,
-                    "tags": q.get("tags") or [],
+                    "tags": query_row.get("tags") or [],
+                    "bucket": query_row.get("bucket"),
+                    "expected_wardrobe_use": query_row.get("expected_wardrobe_use"),
+                    "anchor_category": query_row.get("anchor_category"),
+                    "anchor_color": query_row.get("anchor_color"),
                     "elapsed_ms": elapsed_ms,
                     "result": summary,
                 }
             )
-            metrics_rows.append(_compute_metrics_for_query(query_text, summary, user_id=variant.user_id))
+            metrics_rows.append(_compute_metrics_for_query(query_row, summary, user_id=variant.user_id))
 
         return {
             "variant": variant.name,
@@ -398,7 +397,9 @@ def _judge_variant(run_payload: dict[str, Any]) -> dict[str, Any]:
 
         judged_items.append(
             {
+                "id": item.get("id"),
                 "query": query,
+                "bucket": item.get("bucket"),
                 "judge_result": judge_result,
                 "judge_status": "ok" if judge_result is not None else "null_response",
                 "derived": derived,
@@ -422,7 +423,16 @@ def _judge_variant(run_payload: dict[str, Any]) -> dict[str, Any]:
 def _format_pct(value: float | None) -> str:
     if value is None:
         return "n/a"
-    return f"{value*100:.1f}%"
+    return f"{value * 100:.1f}%"
+
+
+def _format_delta(current: float | None, previous: float | None) -> str:
+    if current is None or previous is None:
+        return "n/a"
+    delta = current - previous
+    if abs(delta) >= 1:
+        return f"{delta:+.2f}"
+    return f"{delta:+.1%}"
 
 
 def _write_suite_report(suite_dir: Path, suite_payload: dict[str, Any]) -> None:
@@ -433,25 +443,25 @@ def _write_suite_report(suite_dir: Path, suite_payload: dict[str, Any]) -> None:
     lines.append(f"- Variants: {', '.join(suite_payload['variants'])}")
     lines.append("")
 
-    lines.append("## Deterministic metrics (summary)")
+    lines.append("## Primary metrics (summary)")
     lines.append("")
-    lines.append("| Variant | Role complete@1 | Color any@1 | Category any@1 | Dup signature@3 | Shared item@3 | Wardrobe hit@1 | Wardrobe hit@3 |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
-    for v in suite_payload["variants"]:
-        metrics = (suite_payload["results"].get(v, {}) or {}).get("metrics", {}) or {}
-        s = metrics.get("summary", {}) or {}
+    lines.append(
+        "| Variant | Role complete@1 | Category hit@1 | Wardrobe hit@1 | Wardrobe override | Neg-control intrusion |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|")
+    for variant_name in suite_payload["variants"]:
+        metrics = (suite_payload["results"].get(variant_name, {}) or {}).get("metrics", {}) or {}
+        summary = metrics.get("summary", {}) or {}
         lines.append(
             "| "
             + " | ".join(
                 [
-                    v,
-                    _format_pct(s.get("role_complete_top1_rate")),
-                    _format_pct(s.get("color_any_hit_top1_rate")),
-                    _format_pct(s.get("category_any_hit_top1_rate")),
-                    _format_pct(s.get("top3_duplicate_signature_rate")),
-                    _format_pct(s.get("top3_shared_item_ids_rate")),
-                    _format_pct(s.get("wardrobe_hit_at_1_rate")),
-                    _format_pct(s.get("wardrobe_hit_at_3_rate")),
+                    variant_name,
+                    _format_pct(summary.get("role_complete_top1_rate")),
+                    _format_pct(summary.get("category_any_hit_top1_rate")),
+                    _format_pct(summary.get("wardrobe_hit_at_1_rate")),
+                    _format_pct(summary.get("wardrobe_constraint_override_rate")),
+                    _format_pct(summary.get("negative_control_wardrobe_intrusion_rate")),
                 ]
             )
             + " |"
@@ -459,19 +469,43 @@ def _write_suite_report(suite_dir: Path, suite_payload: dict[str, Any]) -> None:
     lines.append("")
 
     if suite_payload.get("judge_enabled"):
-        lines.append("## LLM judge (mean overall)")
+        lines.append("## Judge overall")
         lines.append("")
         lines.append("| Variant | Mean overall | Mean relevance | Mean constraint_fit | Mean coherence |")
         lines.append("|---|---:|---:|---:|---:|")
-        for v in suite_payload["variants"]:
-            judge = (suite_payload["results"].get(v, {}) or {}).get("judge", {}) or {}
+        for variant_name in suite_payload["variants"]:
+            judge = (suite_payload["results"].get(variant_name, {}) or {}).get("judge", {}) or {}
             if not judge.get("ok"):
-                lines.append(f"| {v} | n/a | n/a | n/a | n/a |")
+                lines.append(f"| {variant_name} | n/a | n/a | n/a | n/a |")
                 continue
-            js = judge.get("summary", {}) or {}
-            subs = js.get("mean_subscores", {}) or {}
+            judge_summary = judge.get("summary", {}) or {}
+            sub = judge_summary.get("mean_subscores", {}) or {}
             lines.append(
-                f"| {v} | {js.get('mean_overall', 'n/a')} | {subs.get('relevance','n/a')} | {subs.get('constraint_fit','n/a')} | {subs.get('coherence','n/a')} |"
+                f"| {variant_name} | {judge_summary.get('mean_overall', 'n/a')} | {sub.get('relevance', 'n/a')} | {sub.get('constraint_fit', 'n/a')} | {sub.get('coherence', 'n/a')} |"
+            )
+        lines.append("")
+
+    if "wardrobe_sparse" in suite_payload["variants"] and "wardrobe_dense" in suite_payload["variants"]:
+        sparse_metrics = suite_payload["results"]["wardrobe_sparse"]["metrics"]["summary"]
+        dense_metrics = suite_payload["results"]["wardrobe_dense"]["metrics"]["summary"]
+        lines.append("## Dense lift (`wardrobe_dense - wardrobe_sparse`)")
+        lines.append("")
+        lines.append("| Metric | Dense lift |")
+        lines.append("|---|---:|")
+        lines.append(
+            f"| Wardrobe hit@1 | {_format_delta(dense_metrics.get('wardrobe_hit_at_1_rate'), sparse_metrics.get('wardrobe_hit_at_1_rate'))} |"
+        )
+        lines.append(
+            f"| Wardrobe override rate | {_format_delta(dense_metrics.get('wardrobe_constraint_override_rate'), sparse_metrics.get('wardrobe_constraint_override_rate'))} |"
+        )
+        lines.append(
+            f"| Neg-control intrusion | {_format_delta(dense_metrics.get('negative_control_wardrobe_intrusion_rate'), sparse_metrics.get('negative_control_wardrobe_intrusion_rate'))} |"
+        )
+        if suite_payload.get("judge_enabled"):
+            sparse_judge = (suite_payload["results"]["wardrobe_sparse"].get("judge") or {}).get("summary", {}) or {}
+            dense_judge = (suite_payload["results"]["wardrobe_dense"].get("judge") or {}).get("summary", {}) or {}
+            lines.append(
+                f"| Judge overall | {_format_delta(dense_judge.get('mean_overall'), sparse_judge.get('mean_overall'))} |"
             )
         lines.append("")
 
@@ -483,54 +517,59 @@ def main() -> None:
     parser.add_argument(
         "--query-set",
         type=str,
-        choices=["queries_eval_10_mens", "benchmark_queries"],
-        default="queries_eval_10_mens",
+        choices=["queries_eval_10_mens", "benchmark_queries", "wardrobe_eval_demo_user"],
+        default="wardrobe_eval_demo_user",
         help="Which query set to run.",
     )
     parser.add_argument(
         "--variants",
         type=str,
-        default="baseline_det,parser_only,parser_plus_dense,wardrobe_on",
+        default="catalog_sparse,catalog_dense,wardrobe_sparse,wardrobe_dense",
         help="Comma-separated variant names.",
     )
     parser.add_argument("--judge", type=str, choices=["true", "false"], default="false", help="Run LLM judge.")
     args = parser.parse_args()
 
     if args.query_set == "queries_eval_10_mens":
-        queries = [{"id": None, "query": q, "tags": []} for q in _load_queries_txt(EVAL_DIR / "queries_eval_10_mens.txt")]
+        queries = _load_queries_txt(EVAL_DIR / "queries_eval_10_mens.txt")
         query_set_label = "eval/recommender_eval/queries_eval_10_mens.txt"
-    else:
-        queries = _load_queries_benchmark_json(EVAL_DIR / "benchmark_queries.json")
+    elif args.query_set == "benchmark_queries":
+        queries = _load_queries_json(EVAL_DIR / "benchmark_queries.json")
         query_set_label = "eval/recommender_eval/benchmark_queries.json"
+    else:
+        queries = _load_queries_json(EVAL_DIR / "queries_wardrobe_eval_demo_user.json")
+        query_set_label = "eval/recommender_eval/queries_wardrobe_eval_demo_user.json"
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     suite_id = f"suite_{stamp}"
     suite_dir = EVAL_DIR / "artifacts" / "suites" / suite_id
     suite_dir.mkdir(parents=True, exist_ok=True)
 
-    variant_names = [v.strip() for v in str(args.variants).split(",") if v.strip()]
+    variant_names = [name.strip() for name in str(args.variants).split(",") if name.strip()]
     results: dict[str, Any] = {}
 
-    for vname in variant_names:
-        if vname not in VARIANTS:
-            raise SystemExit(f"Unknown variant: {vname}. Known: {', '.join(sorted(VARIANTS))}")
-        variant = VARIANTS[vname]
+    for variant_name in variant_names:
+        if variant_name not in VARIANTS:
+            raise SystemExit(f"Unknown variant: {variant_name}. Known: {', '.join(sorted(VARIANTS))}")
+        variant = VARIANTS[variant_name]
 
-        vdir = suite_dir / vname
-        vdir.mkdir(parents=True, exist_ok=True)
+        variant_dir = suite_dir / variant_name
+        variant_dir.mkdir(parents=True, exist_ok=True)
 
         run_payload = _run_variant(variant, queries)
-        (vdir / "run.json").write_text(json.dumps(run_payload, indent=2), encoding="utf-8")
-        (vdir / "metrics.json").write_text(json.dumps(run_payload["metrics"]["rows"], indent=2), encoding="utf-8")
-        (vdir / "metrics_summary.json").write_text(json.dumps(run_payload["metrics"]["summary"], indent=2), encoding="utf-8")
+        (variant_dir / "run.json").write_text(json.dumps(run_payload, indent=2), encoding="utf-8")
+        (variant_dir / "metrics.json").write_text(json.dumps(run_payload["metrics"]["rows"], indent=2), encoding="utf-8")
+        (variant_dir / "metrics_summary.json").write_text(
+            json.dumps(run_payload["metrics"]["summary"], indent=2), encoding="utf-8"
+        )
 
         judge_payload = None
         if args.judge == "true":
             judge_payload = _judge_variant(run_payload)
-            (vdir / "judge.json").write_text(json.dumps(judge_payload, indent=2), encoding="utf-8")
+            (variant_dir / "judge.json").write_text(json.dumps(judge_payload, indent=2), encoding="utf-8")
 
-        results[vname] = {
-            "run_path": str((vdir / "run.json").as_posix()),
+        results[variant_name] = {
+            "run_path": str((variant_dir / "run.json").as_posix()),
             "metrics": run_payload["metrics"],
             "judge": judge_payload,
         }
@@ -551,4 +590,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

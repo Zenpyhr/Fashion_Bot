@@ -220,10 +220,36 @@ def _dense_rerank_role_pool(role_df: pd.DataFrame, constraints: dict) -> pd.Data
 
 
 @lru_cache(maxsize=1)
+def _resolve_catalog_path(configured_path: str) -> Path:
+    """Resolve the catalog path, with a compatibility fallback for older layouts."""
+
+    catalog_path = Path(configured_path)
+    if catalog_path.exists():
+        return catalog_path
+
+    parts = list(catalog_path.parts)
+    lower_parts = [part.lower() for part in parts]
+
+    for index in range(len(parts) - 1):
+        if lower_parts[index] == "data" and lower_parts[index + 1] == "processed":
+            fallback_path = Path(*parts[: index + 1], "recommender", *parts[index + 1 :])
+            if fallback_path.exists():
+                logging.warning(
+                    "Configured catalog path %s was not found; using compatibility fallback %s",
+                    catalog_path,
+                    fallback_path,
+                )
+                return fallback_path
+            break
+
+    return catalog_path
+
+
+@lru_cache(maxsize=1)
 def load_catalog_items() -> pd.DataFrame:
     """Load the processed catalog once per process."""
 
-    catalog_path = Path(settings.catalog_items_csv)
+    catalog_path = _resolve_catalog_path(settings.catalog_items_csv)
     if not catalog_path.exists():
         raise FileNotFoundError(f"Processed catalog not found: {catalog_path}")
     return pd.read_csv(catalog_path)
@@ -240,8 +266,8 @@ def _score_query_term_overlap(row: pd.Series, search_terms: list[str]) -> int:
 def _score_category_preferences(row: pd.Series, preferred_categories: list[str]) -> int:
     if not preferred_categories:
         return 0
-    category = str(row["normalized_category"]).lower()
-    display_name = str(row["display_name"]).lower()
+    category = str(row.get("normalized_category", "")).lower()
+    display_name = str(row.get("display_name", "")).lower()
     if category in preferred_categories:
         return 10
     if any(keyword.replace("_", " ") in display_name for keyword in preferred_categories):
@@ -252,8 +278,8 @@ def _score_category_preferences(row: pd.Series, preferred_categories: list[str])
 def _score_color_preferences(row: pd.Series, preferred_colors: list[str]) -> int:
     if not preferred_colors:
         return 0
-    normalized_color = str(row["normalized_color"]).lower()
-    color_detail = str(row["color_detail"]).lower()
+    normalized_color = str(row.get("normalized_color", "")).lower()
+    color_detail = str(row.get("color_detail", "")).lower()
     if normalized_color in preferred_colors:
         return 10
     if any(color in color_detail for color in preferred_colors):
@@ -264,7 +290,7 @@ def _score_color_preferences(row: pd.Series, preferred_colors: list[str]) -> int
 def _score_formality_proxy(row: pd.Series, formality: str | None) -> int:
     if formality is None:
         return 0
-    return FORMALITY_CATEGORY_WEIGHTS.get(formality, {}).get(str(row["normalized_category"]).lower(), 0)
+    return FORMALITY_CATEGORY_WEIGHTS.get(formality, {}).get(str(row.get("normalized_category", "")).lower(), 0)
 
 
 def _score_occasion_proxy(row: pd.Series, occasion: str | None) -> int:
@@ -273,7 +299,7 @@ def _score_occasion_proxy(row: pd.Series, occasion: str | None) -> int:
     hints = OCCASION_HINTS.get(occasion)
     if not hints:
         return 0
-    section_theme = str(row["section_theme"]).lower()
+    section_theme = str(row.get("section_theme", "")).lower()
     score = 0
     if section_theme in hints["preferred_section_themes"]:
         score += 4
@@ -422,7 +448,7 @@ def _score_item(row: pd.Series, constraints: dict) -> int:
     score += _score_occasion_proxy(row, constraints["occasion"])
     score += _score_guardrails(row, constraints)
 
-    if constraints["formality"] in {"formal", "smart_casual", "business"} and str(row["section_theme"]).lower() == "sport":
+    if constraints["formality"] in {"formal", "smart_casual", "business"} and str(row.get("section_theme", "")).lower() == "sport":
         score -= 8
 
     return score
@@ -514,14 +540,16 @@ def retrieve_candidates_by_role(constraints: dict) -> dict[str, list[dict]]:
                 table = _wardrobe_table(engine)
                 wardrobe_items = fetch_wardrobe_items_for_user(engine, table, user_id=user_id)
 
-                # Small preference for owned items, but still let dense scoring decide.
+                # Score wardrobe items with the same query-aware logic as catalog rows,
+                # then give a small ownership bonus so they can win close calls.
                 WARDROBE_BOOST = 3
                 for item in wardrobe_items:
                     if str(item.get("recommendation_role") or "") != role:
                         continue
 
                     boosted = dict(item)
-                    boosted["candidate_score"] = int(boosted.get("candidate_score") or 10) + WARDROBE_BOOST
+                    wardrobe_score = _score_item(pd.Series(boosted), constraints)
+                    boosted["candidate_score"] = wardrobe_score + WARDROBE_BOOST
                     role_shortlist = pd.concat([pd.DataFrame([boosted]), role_shortlist], ignore_index=True)
 
                 if wardrobe_items:

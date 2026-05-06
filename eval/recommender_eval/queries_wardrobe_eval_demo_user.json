@@ -1,0 +1,109 @@
+[
+  {
+    "id": "W01",
+    "query": "Use my grey sneakers in a casual everyday outfit",
+    "bucket": "positive",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "sneakers",
+    "anchor_color": "gray",
+    "tags": ["wardrobe", "positive", "casual", "sneakers", "gray"]
+  },
+  {
+    "id": "W02",
+    "query": "Build a smart casual outfit with black trousers",
+    "bucket": "positive",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "trousers",
+    "anchor_color": "black",
+    "tags": ["wardrobe", "positive", "smart_casual", "trousers", "black"]
+  },
+  {
+    "id": "W03",
+    "query": "Style a casual look around a blue overshirt",
+    "bucket": "positive",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "jacket",
+    "anchor_color": "blue",
+    "tags": ["wardrobe", "positive", "casual", "jacket", "blue"]
+  },
+  {
+    "id": "W04",
+    "query": "Make a neutral outfit using a beige half-zip sweatshirt",
+    "bucket": "positive",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "sweater",
+    "anchor_color": "beige",
+    "tags": ["wardrobe", "positive", "neutral", "sweater", "beige"]
+  },
+  {
+    "id": "W05",
+    "query": "Use the navy sweatshirt in a relaxed weekend outfit",
+    "bucket": "positive",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "shirt",
+    "anchor_color": "blue",
+    "tags": ["wardrobe", "positive", "weekend", "shirt", "blue"]
+  },
+  {
+    "id": "W06",
+    "query": "Build a clean office outfit using black trousers",
+    "bucket": "mix",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "trousers",
+    "anchor_color": "black",
+    "tags": ["wardrobe", "mix", "office", "trousers", "black"]
+  },
+  {
+    "id": "W07",
+    "query": "Give me a relaxed weekend outfit that uses grey sneakers",
+    "bucket": "mix",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "sneakers",
+    "anchor_color": "gray",
+    "tags": ["wardrobe", "mix", "weekend", "sneakers", "gray"]
+  },
+  {
+    "id": "W08",
+    "query": "Style the blue overshirt with trousers and sneakers",
+    "bucket": "mix",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "jacket",
+    "anchor_color": "blue",
+    "tags": ["wardrobe", "mix", "jacket", "blue"]
+  },
+  {
+    "id": "W09",
+    "query": "Create a layered neutral outfit using the beige half-zip",
+    "bucket": "mix",
+    "expected_wardrobe_use": "yes",
+    "anchor_category": "sweater",
+    "anchor_color": "beige",
+    "tags": ["wardrobe", "mix", "neutral", "sweater", "beige"]
+  },
+  {
+    "id": "W10",
+    "query": "Formal dinner outfit with dark dress shoes",
+    "bucket": "negative_control",
+    "expected_wardrobe_use": "no",
+    "anchor_category": "trousers",
+    "anchor_color": "black",
+    "tags": ["wardrobe", "negative_control", "formal", "dinner"]
+  },
+  {
+    "id": "W11",
+    "query": "Rainy day outfit with a hooded jacket",
+    "bucket": "negative_control",
+    "expected_wardrobe_use": "no",
+    "anchor_category": "jacket",
+    "tags": ["wardrobe", "negative_control", "rainy", "outerwear"]
+  },
+  {
+    "id": "W12",
+    "query": "All black outfit with white sneakers",
+    "bucket": "negative_control",
+    "expected_wardrobe_use": "no",
+    "anchor_category": "sneakers",
+    "anchor_color": "white",
+    "tags": ["wardrobe", "negative_control", "black", "white", "sneakers"]
+  }
+]

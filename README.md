@@ -511,7 +511,16 @@ python eval\recommender_eval\run_retrieval_eval.py --file eval\recommender_eval\
 python eval\recommender_eval\judge_retrieval_run.py
 ```
 
-See `eval/recommender_eval/rubric.md` for the judge rubric.
+Wardrobe benchmark suite:
+
+```powershell
+python eval\recommender_eval\run_quant_suite.py --query-set wardrobe_eval_demo_user --variants catalog_sparse,catalog_dense,wardrobe_sparse,wardrobe_dense --judge false
+```
+
+See:
+
+- `eval/recommender_eval/EVAL_GUIDANCE.md` for the benchmark design and metrics
+- `eval/recommender_eval/rubric.md` for the judge rubric
 
 ### Older / generic benchmark harness
 
