@@ -1,4 +1,4 @@
-"""Wardrobe upload + management API routes."""
+﻿"""Wardrobe upload + management API routes."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, UploadFile
 
 from src.database.wardrobe_store import create_engine_from_settings, ensure_wardrobe_items_table
+from src.integrations.pgvector_store import ensure_wardrobe_embeddings_table, infer_vector_dim
+from src.shared.config import settings
 from src.recommender.wardrobe_service import ingest_wardrobe_image
 
 router = APIRouter()
@@ -50,11 +52,22 @@ async def upload_wardrobe_item(
 
 @router.post("/clear")
 async def clear_wardrobe(user_id: str = Form(...)) -> dict:
-    """Delete all wardrobe items for a user (DB rows only)."""
+    """Delete all wardrobe items for a user (metadata + embeddings)."""
 
     engine = create_engine_from_settings()
-    table = ensure_wardrobe_items_table(engine)
+
+    items_table = ensure_wardrobe_items_table(engine)
+    emb_table = ensure_wardrobe_embeddings_table(engine, vector_dim=infer_vector_dim(settings.openai_embedding_model))
+
     with engine.begin() as conn:
-        deleted = conn.execute(table.delete().where(table.c.user_id == user_id)).rowcount
-    return {"ok": True, "user_id": user_id, "deleted": int(deleted or 0)}
+        deleted_items = conn.execute(items_table.delete().where(items_table.c.user_id == user_id)).rowcount
+        deleted_embeddings = conn.execute(emb_table.delete().where(emb_table.c.user_id == user_id)).rowcount
+
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "deleted_items": int(deleted_items or 0),
+        "deleted_embeddings": int(deleted_embeddings or 0),
+    }
+
 

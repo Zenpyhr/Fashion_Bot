@@ -1,4 +1,4 @@
-"""Wardrobe ingestion service.
+﻿"""Wardrobe ingestion service.
 
 Single entrypoint that both scripts and future UI upload routes should call.
 
@@ -23,6 +23,17 @@ from src.database.wardrobe_store import (
     create_engine_from_settings,
     ensure_wardrobe_items_table,
     upsert_wardrobe_items,
+)
+from src.shared.config import settings
+from src.integrations.embeddings import embed_text_openai, l2_normalize
+from src.integrations.pgvector_store import (
+    WardrobeEmbeddingRow,
+    build_item_text,
+    create_engine_from_settings as create_pg_engine,
+    ensure_wardrobe_embeddings_table,
+    infer_vector_dim,
+    sha256_text,
+    upsert_wardrobe_embeddings,
 )
 from src.recommender.vlm_tagging import tag_image
 from src.recommender.wardrobe_normalize import normalize_wardrobe_item
@@ -101,9 +112,38 @@ def ingest_wardrobe_image(
     )
     upsert_wardrobe_items(engine, table, [row])
 
+    # Store an embedding for this wardrobe item so dense retrieval can use it.
+    item_text = build_item_text(row.item)
+    if item_text.strip():
+        embedding_model = settings.openai_embedding_model
+        vector_dim = infer_vector_dim(embedding_model)
+        pg_engine = create_pg_engine()
+        emb_table = ensure_wardrobe_embeddings_table(pg_engine, vector_dim=vector_dim)
+        embedding = l2_normalize(embed_text_openai(item_text))
+        text_hash = sha256_text(item_text)
+        upsert_wardrobe_embeddings(
+            pg_engine,
+            emb_table,
+            [
+                WardrobeEmbeddingRow(
+                    user_id=user_id,
+                    wardrobe_item_id=wardrobe_item_id,
+                    embedding=embedding,
+                    embedding_model=embedding_model,
+                    text_hash=text_hash,
+                    item_text=item_text,
+                )
+            ],
+        )
+
     return IngestResult(
         wardrobe_item_id=wardrobe_item_id,
         staged_image_path=str(dest),
         quarantine_reasons=normalized.quarantine_reasons,
     )
+
+
+
+
+
 

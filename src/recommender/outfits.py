@@ -1,4 +1,4 @@
-"""Assemble outfit responses from ranked item candidates."""
+﻿"""Assemble outfit responses from ranked item candidates."""
 
 from __future__ import annotations
 
@@ -411,45 +411,6 @@ def build_outfits(user_query: str, *, user_id: str | None = None) -> dict:
         constraints["user_id"] = user_id
     candidates_by_role = retrieve_candidates_by_role(constraints)
 
-    # Merge user wardrobe items (if provided) and gently prioritize them.
-    user_id = constraints.get("user_id")  # optionally injected by API layer later
-    if user_id:
-        try:
-            from sqlalchemy.exc import SQLAlchemyError
-            from src.database.wardrobe_store import (
-                create_engine_from_settings as _wardrobe_engine,
-                ensure_wardrobe_items_table as _wardrobe_table,
-                fetch_wardrobe_items_for_user,
-            )
-
-            engine = _wardrobe_engine()
-            table = _wardrobe_table(engine)
-            wardrobe_items = fetch_wardrobe_items_for_user(engine, table, user_id=user_id)
-
-            WARDROBE_BOOST = 8
-            for item in wardrobe_items:
-                role = str(item.get("recommendation_role") or "")
-                if not role:
-                    continue
-                if role not in candidates_by_role:
-                    continue
-
-                boosted = dict(item)
-                # Wardrobe items do not have sparse candidate_score; give them a baseline + boost.
-                boosted["candidate_score"] = int(boosted.get("candidate_score") or 10) + WARDROBE_BOOST
-                candidates_by_role[role] = [boosted] + candidates_by_role[role]
-            constraints["wardrobe_status"] = "ok"
-        except SQLAlchemyError as exc:
-            # Wardrobe is optional; keep baseline recommender working if DB is unavailable.
-            logging.warning("Wardrobe DB unavailable for user_id=%s: %s", user_id, exc)
-            constraints["wardrobe_status"] = "db_error"
-            constraints["wardrobe_error"] = str(exc)
-        except Exception as exc:
-            # Don't hide unexpected bugs; surface them in the response + logs.
-            logging.exception("Unexpected wardrobe merge failure for user_id=%s", user_id)
-            constraints["wardrobe_status"] = "unexpected_error"
-            constraints["wardrobe_error"] = str(exc)
-
     combo_builder_source = "deterministic"
     ranked_outfits = _try_llm_compose_outfits(user_query, constraints, candidates_by_role)
     if ranked_outfits:
@@ -501,3 +462,5 @@ def build_outfits(user_query: str, *, user_id: str | None = None) -> dict:
         "outfits": formatted_outfits,
         "missing_items": missing_items,
     }
+
+

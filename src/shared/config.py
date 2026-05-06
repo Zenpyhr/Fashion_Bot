@@ -1,4 +1,4 @@
-"""Application configuration."""
+﻿"""Application configuration."""
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     items_table: str = "items"
     article_chunks_table: str = "article_chunks"
     catalog_item_embeddings_table: str = "catalog_item_embeddings"
-
+    wardrobe_item_embeddings_table: str = "wardrobe_item_embeddings"
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 settings = Settings()
+

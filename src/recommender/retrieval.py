@@ -10,7 +10,13 @@ import numpy as np
 import pandas as pd
 from src.integrations.embeddings import embed_text_openai, l2_normalize
 from src.integrations.openai_client import openai_is_configured
-from src.integrations.pgvector_store import create_engine_from_settings, ensure_embeddings_table, fetch_embeddings
+from src.integrations.pgvector_store import (
+    create_engine_from_settings,
+    ensure_embeddings_table,
+    ensure_wardrobe_embeddings_table,
+    fetch_embeddings,
+    fetch_wardrobe_embeddings,
+)
 from src.shared.config import settings
 
 ROLE_LIMITS = {
@@ -154,9 +160,40 @@ def _dense_rerank_role_pool(role_df: pd.DataFrame, constraints: dict) -> pd.Data
             query_emb = _embed_query_text_cached(query_text, settings.openai_embedding_model)
             constraints["_dense_query_embedding"] = query_emb
 
-        engine, table = _get_embeddings_store()
+        engine, catalog_table = _get_embeddings_store()
         item_ids = [str(item_id) for item_id in role_df["item_id"].tolist()]
-        emb_by_id = fetch_embeddings(engine, table, item_ids)
+
+        if "source_type" in role_df.columns:
+            source_series = role_df["source_type"].fillna("catalog").astype(str).str.lower()
+        else:
+            source_series = pd.Series(["catalog"] * len(item_ids), index=role_df.index)
+
+        wardrobe_user_id = str(constraints.get("user_id") or "").strip() or None
+        wardrobe_ids = [
+            str(item_id)
+            for item_id, source in zip(item_ids, source_series.tolist(), strict=False)
+            if source == "wardrobe"
+        ]
+        catalog_ids = [
+            str(item_id)
+            for item_id, source in zip(item_ids, source_series.tolist(), strict=False)
+            if source != "wardrobe"
+        ]
+
+        emb_by_id: dict[str, list[float]] = {}
+        if catalog_ids:
+            emb_by_id.update(fetch_embeddings(engine, catalog_table, catalog_ids))
+
+        if wardrobe_user_id and wardrobe_ids:
+            wardrobe_table = ensure_wardrobe_embeddings_table(engine, vector_dim=_infer_vector_dim())
+            emb_by_id.update(
+                fetch_wardrobe_embeddings(
+                    engine,
+                    wardrobe_table,
+                    user_id=wardrobe_user_id,
+                    wardrobe_item_ids=wardrobe_ids,
+                )
+            )
 
         # Compute cosine similarity via dot product (vectors are normalized).
         dense_scores = []
@@ -461,10 +498,44 @@ def retrieve_candidates_by_role(constraints: dict) -> dict[str, list[dict]]:
             shortlist_k = max(shortlist_k, settings.dense_shortlist_k_per_role)
 
         role_shortlist = role_df.head(shortlist_k).copy()
-        if (
-            settings.enable_dense_retrieval_rerank
-            and openai_is_configured()
-        ):
+
+        # Funnel design: add wardrobe items into the shortlist, then do dense rerank once.
+        user_id = str(constraints.get("user_id") or "").strip()
+        if user_id:
+            try:
+                from sqlalchemy.exc import SQLAlchemyError
+                from src.database.wardrobe_store import (
+                    create_engine_from_settings as _wardrobe_engine,
+                    ensure_wardrobe_items_table as _wardrobe_table,
+                    fetch_wardrobe_items_for_user,
+                )
+
+                engine = _wardrobe_engine()
+                table = _wardrobe_table(engine)
+                wardrobe_items = fetch_wardrobe_items_for_user(engine, table, user_id=user_id)
+
+                # Small preference for owned items, but still let dense scoring decide.
+                WARDROBE_BOOST = 3
+                for item in wardrobe_items:
+                    if str(item.get("recommendation_role") or "") != role:
+                        continue
+
+                    boosted = dict(item)
+                    boosted["candidate_score"] = int(boosted.get("candidate_score") or 10) + WARDROBE_BOOST
+                    role_shortlist = pd.concat([pd.DataFrame([boosted]), role_shortlist], ignore_index=True)
+
+                if wardrobe_items:
+                    constraints["wardrobe_status"] = "ok"
+            except SQLAlchemyError as exc:
+                logging.warning("Wardrobe DB unavailable for user_id=%s: %s", user_id, exc)
+                constraints["wardrobe_status"] = "db_error"
+                constraints["wardrobe_error"] = str(exc)
+            except Exception as exc:
+                logging.exception("Unexpected wardrobe merge failure for user_id=%s", user_id)
+                constraints["wardrobe_status"] = "unexpected_error"
+                constraints["wardrobe_error"] = str(exc)
+
+        if settings.enable_dense_retrieval_rerank and openai_is_configured():
             role_shortlist = _dense_rerank_role_pool(role_shortlist, constraints)
 
         # Keep a small but category-diverse pool per role before outfit composition.

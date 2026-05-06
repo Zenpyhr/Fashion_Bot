@@ -115,29 +115,15 @@ def tag_image(
 
     prompt = (
         "You are a fashion wardrobe metadata tagger.\n"
-        "You must return ONE JSON object only, with exactly the required keys (no extra keys, no markdown).\n"
         "Analyze the clothing item in the image carefully.\n"
+        "Return ONE JSON object only with exactly the required keys.\n"
         "Use seed metadata when provided unless the image clearly contradicts it.\n"
-        "\n"
-        "Hard rules (must follow):\n"
-        "- source_type: always 'wardrobe'\n"
-        "- target_group: always 'men'\n"
-        "- index_name/index_group_name/section_name: keep Wardrobe context (use 'Wardrobe' if unsure)\n"
-        "\n"
-        "display_name rules:\n"
-        "- 2–6 words; include color + garment type (e.g., 'Navy zip-up hoodie')\n"
-        "- do NOT use filenames/ids; do NOT output 'unknown'\n"
-        "\n"
-        "description rules (2–4 natural sentences; not generic):\n"
-        "1) visual details (color tone, pattern, fit/silhouette, notable design details)\n"
-        "2) seasons/weather\n"
-        "3) suitable occasions (daily, work, travel, date, weekend, sportswear)\n"
-        "4) simple styling suggestions (what it pairs with)\n"
-        "\n"
-        "If the item is footwear, set recommendation_role='shoes' and choose an appropriate normalized_category (e.g., sneakers/boots).\n"
-        "If it's outerwear (jacket/coat/blazer), set recommendation_role='outerwear' when appropriate.\n"
-        "\n"
-        "One-shot example output format (JSON):\n"
+        "Always set target_group to 'men'.\n"
+        "Always set source_type to 'wardrobe'.\n"
+        "display_name should be a human-friendly product name, not a filename.\n"
+        "description is the most important field and must be detailed (2-4 sentences).\n"
+        "Include: visual details, seasons/weather, occasions, and simple styling suggestions.\n"
+        "One-shot example output format:\n"
         f"{json.dumps(one_shot_example, indent=2)}\n"
     )
 
@@ -188,11 +174,9 @@ def tag_image(
         result["description"] = (
             f"Men's {result.get('normalized_color', 'unknown')} {result.get('normalized_category', 'fashion item')} "
             f"with a {result.get('normalized_pattern', 'clean')} look and {result.get('section_theme', 'casual')} style. "
-            "Suitable for everyday wear in mild to cool weather and easy to pair with jeans or casual pants."
         )
 
     if not result["display_name"].strip() or result["display_name"].lower() == "unknown":
         result["display_name"] = result.get("product_type_name", "").strip() or "unknown"
 
     return result
-
