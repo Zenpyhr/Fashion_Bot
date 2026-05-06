@@ -44,6 +44,7 @@ def _format_item_summary(item: dict) -> dict:
     image_path = item.get("image_path")
     return {
         "item_id": item["item_id"],
+        "source_type": item.get("source_type") or "catalog",
         "display_name": item["display_name"],
         "recommendation_role": item["recommendation_role"],
         "normalized_category": item["normalized_category"],

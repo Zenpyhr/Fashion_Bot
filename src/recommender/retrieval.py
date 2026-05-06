@@ -103,6 +103,14 @@ ROLE_CATEGORY_LIMITS = {
     "outerwear": 2,
 }
 
+@lru_cache(maxsize=512)
+def _embed_query_text_cached(query_text: str, embedding_model: str) -> list[float]:
+    """Cache query embeddings to avoid per-role repeated OpenAI calls."""
+
+    # include embedding_model in cache key to avoid cross-model reuse
+    _ = embedding_model
+    return l2_normalize(embed_text_openai(query_text))
+
 
 def _infer_vector_dim() -> int:
     model = settings.openai_embedding_model
@@ -141,7 +149,10 @@ def _dense_rerank_role_pool(role_df: pd.DataFrame, constraints: dict) -> pd.Data
         return role_df
 
     try:
-        query_emb = l2_normalize(embed_text_openai(query_text))
+        query_emb = constraints.get("_dense_query_embedding")
+        if not query_emb:
+            query_emb = _embed_query_text_cached(query_text, settings.openai_embedding_model)
+            constraints["_dense_query_embedding"] = query_emb
 
         engine, table = _get_embeddings_store()
         item_ids = [str(item_id) for item_id in role_df["item_id"].tolist()]
@@ -420,6 +431,16 @@ def retrieve_candidates_by_role(constraints: dict) -> dict[str, list[dict]]:
     role_candidates: dict[str, list[dict]] = {}
 
     base_df = catalog_df[catalog_df["target_group"] == target_group].copy()
+
+    # Dense rerank uses the same query across multiple roles; embed once per query.
+    if settings.enable_dense_retrieval_rerank and openai_is_configured():
+        query_text = _query_text(constraints)
+        if query_text:
+            try:
+                constraints["_dense_query_embedding"] = _embed_query_text_cached(query_text, settings.openai_embedding_model)
+            except Exception as exc:
+                logging.warning("Dense query embedding failed; continuing without dense rerank: %s", exc)
+                constraints.pop("_dense_query_embedding", None)
 
     for role in constraints["required_roles"]:
         role_df = base_df[base_df["recommendation_role"] == role].copy()
