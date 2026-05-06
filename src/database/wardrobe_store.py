@@ -28,7 +28,11 @@ metadata = MetaData()
 
 
 def create_engine_from_settings():
-    return create_engine(settings.database_url, pool_pre_ping=True)
+    return create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": 10},
+    )
 
 
 def ensure_wardrobe_items_table(engine) -> Table:

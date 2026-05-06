@@ -127,7 +127,7 @@ async function submitQuery(query) {
     return;
   }
 
-  setStatus("Styling options...");
+  setStatus("Styling options…");
   resultsEl.innerHTML = '<div class="empty-state">Building outfit cards from the demo catalog.</div>';
 
   try {
@@ -207,5 +207,3 @@ wardrobeClearBtn?.addEventListener("click", async () => {
     setStatus(wardrobeStatusEl.textContent);
   }
 });
-
-submitQuery(input.value);

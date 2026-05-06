@@ -1,7 +1,7 @@
 {
-  "source_catalog_csv": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\processed\\catalog_items\\catalog_items_demo.csv",
+  "source_catalog_csv": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\recommender\\processed\\catalog_items\\catalog_items_demo.csv",
   "source_images_root": "Images",
-  "output_images_root": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\processed\\demo_images",
+  "output_images_root": "C:\\Users\\boyan\\OneDrive\\Desktop\\Fashion_Bot\\data\\recommender\\processed\\demo_images",
   "row_count": 5000,
   "unique_item_count": 5000,
   "target_group_counts": {

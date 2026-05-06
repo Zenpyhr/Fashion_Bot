@@ -16,18 +16,27 @@ def _image_url_from_path(image_path: str | None) -> str | None:
         return None
 
     normalized_path = image_path.replace("\\", "/")
-    # Support both relative paths (preferred) and absolute paths on Windows/macOS.
-    demo_prefix = "data/processed/demo_images/"
-    if normalized_path.startswith(demo_prefix):
-        return f"/demo_images/{normalized_path.removeprefix(demo_prefix)}"
-    if f"/{demo_prefix}" in normalized_path:
-        return f"/demo_images/{normalized_path.split(f'/{demo_prefix}', 1)[1]}"
+    # Support relative paths plus absolute paths on Windows/macOS. Keep legacy prefixes so
+    # older DB rows and eval artifacts still map to URLs after the data/ layout move.
+    demo_prefixes = (
+        "data/recommender/processed/demo_images/",
+        "data/processed/demo_images/",
+    )
+    for demo_prefix in demo_prefixes:
+        if normalized_path.startswith(demo_prefix):
+            return f"/demo_images/{normalized_path.removeprefix(demo_prefix)}"
+        if f"/{demo_prefix}" in normalized_path:
+            return f"/demo_images/{normalized_path.split(f'/{demo_prefix}', 1)[1]}"
 
-    wardrobe_prefix = "data/user_wardrobe/"
-    if normalized_path.startswith(wardrobe_prefix):
-        return f"/user_wardrobe/{normalized_path.removeprefix(wardrobe_prefix)}"
-    if f"/{wardrobe_prefix}" in normalized_path:
-        return f"/user_wardrobe/{normalized_path.split(f'/{wardrobe_prefix}', 1)[1]}"
+    wardrobe_prefixes = (
+        "data/recommender/user_wardrobe/",
+        "data/user_wardrobe/",
+    )
+    for wardrobe_prefix in wardrobe_prefixes:
+        if normalized_path.startswith(wardrobe_prefix):
+            return f"/user_wardrobe/{normalized_path.removeprefix(wardrobe_prefix)}"
+        if f"/{wardrobe_prefix}" in normalized_path:
+            return f"/user_wardrobe/{normalized_path.split(f'/{wardrobe_prefix}', 1)[1]}"
     return None
 
 

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     enable_dense_retrieval_rerank: bool = False
     dense_shortlist_k_per_role: int = 200
     dense_rerank_n_per_role: int = 50
-    catalog_items_csv: str = "data/processed/catalog_items/catalog_items_demo.csv"
+    catalog_items_csv: str = "data/recommender/processed/catalog_items/catalog_items_demo.csv"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/fashion_bot"
     items_table: str = "items"
     article_chunks_table: str = "article_chunks"

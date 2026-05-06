@@ -79,8 +79,8 @@ PATTERN_MAP = {
     "treatment": "treated",
 }
 
-DEFAULT_OUTPUT_PATH = Path("data/processed/catalog_items/catalog_items_mvp.csv")
-DEFAULT_SUMMARY_PATH = Path("data/processed/catalog_items/catalog_items_mvp_summary.json")
+DEFAULT_OUTPUT_PATH = Path("data/recommender/processed/catalog_items/catalog_items_mvp.csv")
+DEFAULT_SUMMARY_PATH = Path("data/recommender/processed/catalog_items/catalog_items_mvp_summary.json")
 ALLOWED_TARGET_GROUPS = {"women", "men"}
 EXCLUDED_NORMALIZED_CATEGORIES = {"bodysuit", "other_shoe", "slippers"}
 

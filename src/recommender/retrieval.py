@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 
@@ -123,6 +124,7 @@ def _dense_rerank_role_pool(role_df: pd.DataFrame, constraints: dict) -> pd.Data
     """Dense rerank inside a sparse shortlist.
 
     Assumes embeddings stored in Postgres are already L2-normalized.
+    If Postgres is down (Docker off), fall back to the sparse-ranked pool.
     """
 
     if role_df.empty:
@@ -138,31 +140,35 @@ def _dense_rerank_role_pool(role_df: pd.DataFrame, constraints: dict) -> pd.Data
     if not query_text:
         return role_df
 
-    query_emb = l2_normalize(embed_text_openai(query_text))
+    try:
+        query_emb = l2_normalize(embed_text_openai(query_text))
 
-    engine, table = _get_embeddings_store()
-    item_ids = [str(item_id) for item_id in role_df["item_id"].tolist()]
-    emb_by_id = fetch_embeddings(engine, table, item_ids)
+        engine, table = _get_embeddings_store()
+        item_ids = [str(item_id) for item_id in role_df["item_id"].tolist()]
+        emb_by_id = fetch_embeddings(engine, table, item_ids)
 
-    # Compute cosine similarity via dot product (vectors are normalized).
-    dense_scores = []
-    for item_id in item_ids:
-        emb = emb_by_id.get(str(item_id))
-        if not emb:
-            dense_scores.append(None)
-            continue
-        dense_scores.append(float(np.dot(query_emb, np.asarray(emb, dtype=np.float32))))
+        # Compute cosine similarity via dot product (vectors are normalized).
+        dense_scores = []
+        for item_id in item_ids:
+            emb = emb_by_id.get(str(item_id))
+            if not emb:
+                dense_scores.append(None)
+                continue
+            dense_scores.append(float(np.dot(query_emb, np.asarray(emb, dtype=np.float32))))
 
-    reranked = role_df.copy()
-    reranked["dense_score"] = dense_scores
+        reranked = role_df.copy()
+        reranked["dense_score"] = dense_scores
 
-    # Prefer dense score when present, keep sparse score as tie-breaker.
-    reranked = reranked.sort_values(
-        by=["dense_score", "candidate_score", "normalized_category", "display_name"],
-        ascending=[False, False, True, True],
-        na_position="last",
-    )
-    return reranked
+        # Prefer dense score when present, keep sparse score as tie-breaker.
+        reranked = reranked.sort_values(
+            by=["dense_score", "candidate_score", "normalized_category", "display_name"],
+            ascending=[False, False, True, True],
+            na_position="last",
+        )
+        return reranked
+    except Exception as exc:
+        logging.warning("Dense rerank skipped (Postgres/embeddings unavailable): %s", exc)
+        return role_df
 
 
 @lru_cache(maxsize=1)

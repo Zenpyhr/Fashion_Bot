@@ -15,7 +15,13 @@ metadata = MetaData()
 
 
 def create_engine_from_settings():
-    return create_engine(settings.database_url, pool_pre_ping=True)
+    """Create a SQLAlchemy engine; fail reasonably fast if Postgres is not running."""
+
+    return create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": 10},
+    )
 
 
 def ensure_pgvector_extension(engine) -> None:

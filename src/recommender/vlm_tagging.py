@@ -78,7 +78,7 @@ def tag_image(
     one_shot_example = {
         "item_id": "wardrobe_hoodie_001",
         "source_type": "wardrobe",
-        "image_path": "data/user_wardrobe/demo_user/uploads/abcd1234.jpg",
+        "image_path": "data/recommender/user_wardrobe/demo_user/uploads/abcd1234.jpg",
         "image_relative_path": "abcd1234.jpg",
         "display_name": "Navy hoodie",
         "description": "Dark navy men's hoodie with a solid pattern and relaxed casual vibe. Best for fall and winter or cool spring evenings, and suitable for daily wear, travel, and laid-back weekends. Pairs well with denim, joggers, or cargo trousers; works as a top layer or mid-layer under a lightweight jacket.",
@@ -242,7 +242,7 @@ def tag_image(
     one_shot_example = {
         "item_id": "wardrobe_hoodie_001",
         "source_type": "wardrobe",
-        "image_path": "data/user_wardrobe/demo_user/uploads/abcd1234.jpg",
+        "image_path": "data/recommender/user_wardrobe/demo_user/uploads/abcd1234.jpg",
         "image_relative_path": "abcd1234.jpg",
         "display_name": "Navy hoodie",
         "description": "Dark navy men's hoodie with a solid pattern and relaxed casual vibe. Best for fall and winter or cool spring evenings, and suitable for daily wear, travel, and laid-back weekends. Pairs well with denim, joggers, or cargo trousers; works as a top layer or mid-layer under a lightweight jacket.",
@@ -410,7 +410,7 @@ def tag_image(
     one_shot_example = {
         "item_id": "wardrobe_hoodie_001",
         "source_type": "wardrobe",
-        "image_path": "data/user_wardrobe/demo_user/uploads/abcd1234.jpg",
+        "image_path": "data/recommender/user_wardrobe/demo_user/uploads/abcd1234.jpg",
         "image_relative_path": "abcd1234.jpg",
         "display_name": "Navy hoodie",
         "description": "Dark navy men's hoodie with a solid pattern and relaxed casual vibe. Best for fall and winter or cool spring evenings, and suitable for daily wear, travel, and laid-back weekends. Pairs well with denim, joggers, or cargo trousers; works as a top layer or mid-layer under a lightweight jacket.",
@@ -574,7 +574,7 @@ def tag_image(
     one_shot_example = {
         "item_id": "0504658004",
         "source_type": "catalog",
-        "image_path": "data/processed/demo_images/050/0504658004.jpg",
+        "image_path": "data/recommender/processed/demo_images/050/0504658004.jpg",
         "image_relative_path": "050/0504658004.jpg",
         "display_name": "Birkir canvas (1)",
         "description": "Dark blue men's hoodie with a clean solid pattern and casual streetwear vibe. Best for fall and winter or cool spring evenings, and suitable for daily wear, campus, travel, and relaxed weekend outings. Works well with denim, joggers, or cargo pants; ideal as a top layer or mid-layer under a lightweight jacket.",

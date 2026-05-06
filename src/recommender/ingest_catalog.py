@@ -42,8 +42,8 @@ RAW_CATALOG_DTYPES = {
     "detail_desc": "string",
 }
 
-DEFAULT_SOURCE_PATH = Path("data/raw/hm/articles.csv")
-DEFAULT_OUTPUT_PATH = Path("data/processed/catalog_items/catalog_raw_subset.csv")
+DEFAULT_SOURCE_PATH = Path("data/recommender/raw/hm/articles.csv")
+DEFAULT_OUTPUT_PATH = Path("data/recommender/processed/catalog_items/catalog_raw_subset.csv")
 
 
 def ingest_catalog(

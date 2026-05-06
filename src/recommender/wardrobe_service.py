@@ -3,7 +3,7 @@
 Single entrypoint that both scripts and future UI upload routes should call.
 
 Responsibilities:
-- stage image into data/user_wardrobe/<user_id>/uploads/<wardrobe_item_id>.<ext>
+- stage image into data/recommender/user_wardrobe/<user_id>/uploads/<wardrobe_item_id>.<ext>
 - tag with VLM
 - normalize into canonical recommender vocab
 - upsert into Postgres wardrobe_items table
@@ -29,7 +29,7 @@ from src.recommender.wardrobe_normalize import normalize_wardrobe_item
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-WARDROBE_ROOT = PROJECT_ROOT / "data" / "user_wardrobe"
+WARDROBE_ROOT = PROJECT_ROOT / "data" / "recommender" / "user_wardrobe"
 
 
 def _sha256_file(path: Path) -> str:

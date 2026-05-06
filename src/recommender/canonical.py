@@ -11,7 +11,7 @@ from typing import Final
 
 ALLOWED_ROLES: Final[set[str]] = {"top", "bottom", "shoes", "outerwear"}
 
-# Derived from `data/processed/catalog_items/catalog_items_demo.csv`.
+# Derived from `data/recommender/processed/catalog_items/catalog_items_demo.csv`.
 ALLOWED_CATEGORIES: Final[set[str]] = {
     "blazer",
     "boots",
@@ -33,7 +33,7 @@ ALLOWED_CATEGORIES: Final[set[str]] = {
     "waistcoat",
 }
 
-# Derived from `data/processed/catalog_items/catalog_items_demo.csv`.
+# Derived from `data/recommender/processed/catalog_items/catalog_items_demo.csv`.
 ALLOWED_SECTION_THEMES: Final[set[str]] = {
     "basics",
     "casual",

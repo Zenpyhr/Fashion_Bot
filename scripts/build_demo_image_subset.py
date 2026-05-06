@@ -14,11 +14,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-DEFAULT_CATALOG_CSV = PROJECT_ROOT / "data" / "processed" / "catalog_items" / "catalog_items_mvp.csv"
-DEFAULT_SOURCE_ROOT = PROJECT_ROOT / "data" / "raw" / "hm" / "images"
-DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "data" / "processed" / "demo_images"
-DEFAULT_FILTERED_CSV = PROJECT_ROOT / "data" / "processed" / "catalog_items" / "catalog_items_demo.csv"
-DEFAULT_SUMMARY_JSON = PROJECT_ROOT / "data" / "processed" / "catalog_items" / "catalog_items_demo_summary.json"
+DEFAULT_CATALOG_CSV = PROJECT_ROOT / "data" / "recommender" / "processed" / "catalog_items" / "catalog_items_mvp.csv"
+DEFAULT_SOURCE_ROOT = PROJECT_ROOT / "data" / "recommender" / "raw" / "hm" / "images"
+DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "data" / "recommender" / "processed" / "demo_images"
+DEFAULT_FILTERED_CSV = PROJECT_ROOT / "data" / "recommender" / "processed" / "catalog_items" / "catalog_items_demo.csv"
+DEFAULT_SUMMARY_JSON = PROJECT_ROOT / "data" / "recommender" / "processed" / "catalog_items" / "catalog_items_demo_summary.json"
 DEFAULT_EXCLUDED_CATEGORIES = {"flip_flop", "flats", "leggings_tights"}
 
 

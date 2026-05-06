@@ -12,8 +12,8 @@ from app.routes.wardrobe import router as wardrobe_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATIC_ROOT = PROJECT_ROOT / "app" / "static"
-DEMO_IMAGE_ROOT = PROJECT_ROOT / "data" / "processed" / "demo_images"
-WARDROBE_IMAGE_ROOT = PROJECT_ROOT / "data" / "user_wardrobe"
+DEMO_IMAGE_ROOT = PROJECT_ROOT / "data" / "recommender" / "processed" / "demo_images"
+WARDROBE_IMAGE_ROOT = PROJECT_ROOT / "data" / "recommender" / "user_wardrobe"
 
 app = FastAPI(title="Fashion Bot API")
 app.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")

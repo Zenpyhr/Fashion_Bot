@@ -79,7 +79,7 @@ Then update `.env`:
 
 - Always set `OPENAI_API_KEY` if you want LLM parsing/reranking/composition or to build embeddings.
 - Leave the default model values alone unless you intentionally want different OpenAI models.
-- Leave `CATALOG_ITEMS_CSV=data/processed/catalog_items/catalog_items_demo.csv` if you want the included demo catalog.
+- Leave `CATALOG_ITEMS_CSV=data/recommender/processed/catalog_items/catalog_items_demo.csv` if you want the included demo catalog.
 - Leave `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/fashion_bot` if you use the provided local Docker Postgres.
 - Leave `ENABLE_DENSE_RETRIEVAL_RERANK=false` at first. Turn it on only after the embeddings table has been built successfully.
 
@@ -100,20 +100,20 @@ For the normal local setup, these values are already good by default in both fil
 - `OPENAI_MODEL_QUERY_PARSER=gpt-4o-mini`
 - `OPENAI_MODEL_RERANKER=gpt-4o-mini`
 - `OPENAI_EMBEDDING_MODEL=text-embedding-3-large`
-- `CATALOG_ITEMS_CSV=data/processed/catalog_items/catalog_items_demo.csv`
+- `CATALOG_ITEMS_CSV=data/recommender/processed/catalog_items/catalog_items_demo.csv`
 - `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/fashion_bot`
 - `ENABLE_DENSE_RETRIEVAL_RERANK=false`
 
 Only change `.env` when your setup is different:
 
 - Set `OPENAI_API_KEY` to your real key if you want OpenAI-powered parsing/reranking/composition or need to build embeddings.
-- Change `CATALOG_ITEMS_CSV` only if you want to use a different processed catalog file.
+- Change `CATALOG_ITEMS_CSV` only if you want to use a different processed catalog file. If your `.env` still points at `data/processed/...` from an older checkout, switch it to `data/recommender/processed/...` (see `.env.example`).
 - Change `DATABASE_URL` only if your Postgres host, port, database, username, or password differ from the local Docker defaults.
 - Change model names or retrieval flags only if you are intentionally testing a different configuration.
 
 ### 1. Catalog data
 
-By default, Track B uses `data/processed/catalog_items/catalog_items_demo.csv`, so you do not need to change `CATALOG_ITEMS_CSV` for the demo path.  
+By default, Track B uses `data/recommender/processed/catalog_items/catalog_items_demo.csv`, so you do not need to change `CATALOG_ITEMS_CSV` for the demo path.  
 Rebuild or swap the catalog only if you want different inventory, using `scripts/build_catalog.py` and modules under `src/recommender/`.
 
 ### 2. Optional: Postgres + pgvector (dense retrieval / embeddings)
@@ -217,19 +217,26 @@ scripts/
 └── qa_answer.py
 ```
 
+Run locally (from repo root, with `.venv` active and `OPENAI_API_KEY` set):
+
+```powershell
+python scripts\qa_build_db.py
+python scripts\qa_answer.py "What are Spring 2026 fashion trends?"
+```
+
 #### `web_scraping.py`
 
-- Reads URL groups from `data/url_list.json`.
+- Reads URL groups from `data/qa/url_list.json`.
 - Downloads article pages and extracts the main text.
 - Cleans obvious boilerplate/paywall-like content.
-- Saves cleaned raw text files into `data/raw_articles/` with URL, scope, and title metadata.
+- Saves cleaned raw text files into `data/qa/raw_articles/` with URL, scope, and title metadata.
 
 #### `process_for_rag.py`
 
-- Reads raw article `.txt` files from `data/raw_articles/`.
+- Reads raw article `.txt` files from `data/qa/raw_articles/`.
 - Parses metadata and cleans duplicate/noisy text.
 - Splits each article into overlapping chunks for retrieval.
-- Writes processed outputs to `data/processed_articles/` (clean articles + chunk records).
+- Writes processed outputs to `data/qa/processed_articles/` (clean articles + chunk records).
 
 #### `build_db.py`
 
@@ -257,7 +264,7 @@ scripts/
 
 Main responsibilities:
 
-- Ingest H&M catalog metadata from `articles.csv`
+- Ingest H&M catalog metadata from `data/recommender/raw/hm/articles.csv` (via `scripts/build_catalog.py` / `src/recommender/ingest_catalog.py`)
 - Ingest optional user wardrobe items later
 - Normalize item metadata into one shared item schema
 - Build recommendation retrieval and ranking
@@ -301,8 +308,8 @@ This split has minimal overlap because:
 
 ### Data layer
 
-- `articles.csv` / processed **catalog CSV** as the first clothing metadata source
-- Local files for clothing images (`data/processed/...`)
+- **`data/recommender/raw/hm/articles.csv`** and processed **catalog CSV** (`data/recommender/processed/catalog_items/…`) as the clothing metadata sources
+- Local files for clothing images (`data/recommender/processed/...`)
 - **Vector DB / pgvector** for article or catalog embeddings (depending on track)
 - Relational metadata for items when using Postgres
 
@@ -312,6 +319,7 @@ This split has minimal overlap because:
 - `GET /health`
 - `POST /recommend` — outfit recommendations
 - `POST /qa` — stub until Track A integrates the pipeline
+- `POST /wardrobe/upload`, `POST /wardrobe/clear` — wardrobe demo (needs Postgres)
 
 ---
 
@@ -372,23 +380,28 @@ Fashion_Bot/
 ├── docker-compose.yml
 ├── .env.example
 ├── data/
-│   ├── raw/
-│   │   ├── hm/
-│   │   │   ├── articles.csv
-│   │   │   └── images/
-│   │   ├── fashion_articles/
-│   │   └── user_wardrobe/
-│   ├── processed/
-│   │   ├── catalog_items/
-│   │   ├── article_chunks/
-│   │   └── wardrobe_items/
-│   └── sample/
+│   ├── qa/
+│   │   ├── url_list.json
+│   │   ├── raw_articles/
+│   │   ├── processed_articles/
+│   │   └── index/   # local Chroma DB (often gitignored)
+│   └── recommender/
+│       ├── raw/
+│       │   └── hm/
+│       │       ├── articles.csv
+│       │       └── images/
+│       ├── processed/
+│       │   ├── catalog_items/
+│       │   └── demo_images/
+│       ├── sample/
+│       └── user_wardrobe/
 ├── notebooks/
 ├── app/
 │   ├── main.py
 │   ├── routes/
 │   │   ├── qa.py
-│   │   └── recommend.py
+│   │   ├── recommend.py
+│   │   └── wardrobe.py
 │   └── dependencies.py
 ├── src/
 │   ├── shared/
@@ -396,7 +409,7 @@ Fashion_Bot/
 │   │   ├── openai_client.py
 │   │   ├── embeddings.py
 │   │   └── pgvector_store.py
-│   ├── rag/
+│   ├── qa/
 │   ├── recommender/
 │   │   ├── ingest_catalog.py
 │   │   ├── normalize_catalog.py
@@ -416,8 +429,7 @@ Fashion_Bot/
 │       ├── queries_dense_eval.txt
 │       └── artifacts/
 ├── tests/
-├── scripts/
-└── data/
+└── scripts/
 ```
 
 (Not every folder may exist in your clone; treat this as the target layout.)
@@ -428,7 +440,7 @@ Fashion_Bot/
 
 The recommender preprocessing output includes files such as:
 
-- `data/processed/catalog_items/catalog_items_mvp.csv`
+- `data/recommender/processed/catalog_items/catalog_items_mvp.csv`
 
 Typical properties:
 
@@ -438,7 +450,7 @@ Typical properties:
 
 Noisy categories may be excluded (e.g. `bodysuit`, `other_shoe`, `slippers`), depending on the build.
 
-For demos, `catalog_items_demo.csv` is also used—set **`CATALOG_ITEMS_CSV`** in `.env` to the file you actually keep in the repo.
+For demos, `data/recommender/processed/catalog_items/catalog_items_demo.csv` is the default—set **`CATALOG_ITEMS_CSV`** in `.env` if you use a different catalog path.
 
 ---
 
@@ -473,7 +485,7 @@ This keeps wardrobe IDs stable and avoids collisions with H&M/catalog numeric ID
 
 Wardrobe images are staged under:
 
-- `data/user_wardrobe/<user_id>/uploads/<wardrobe_item_id>.<ext>`
+- `data/recommender/user_wardrobe/<user_id>/uploads/<wardrobe_item_id>.<ext>`
 
 FastAPI serves that folder at:
 

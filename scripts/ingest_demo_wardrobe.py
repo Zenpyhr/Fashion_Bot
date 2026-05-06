@@ -1,6 +1,6 @@
 """Ingest 10 demo wardrobe images into Postgres.
 
-This stages images into `data/user_wardrobe/<user_id>/uploads/` with new IDs
+This stages images into `data/recommender/user_wardrobe/<user_id>/uploads/` with new IDs
 (content-hash based), tags them with VLM, normalizes, and upserts into the
 `wardrobe_items` table.
 """
