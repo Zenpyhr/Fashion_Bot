@@ -2,11 +2,11 @@
 
 Workflow:
 1) Run (reranker forced OFF inside that script):
-   python eval/run_retrieval_eval.py --file eval/queries_eval_10_mens.txt
+   python eval/recommender_eval/run_retrieval_eval.py --file eval/recommender_eval/queries_eval_10_mens.txt
 
 2) Judge the latest run:
-   python eval/judge_retrieval_run.py
-   python eval/judge_retrieval_run.py --input eval/artifacts/raw/run_YYYYMMDD_HHMMSS.json
+   python eval/recommender_eval/judge_retrieval_run.py
+   python eval/recommender_eval/judge_retrieval_run.py --input eval/recommender_eval/artifacts/raw/run_YYYYMMDD_HHMMSS.json
 """
 
 from __future__ import annotations
@@ -17,7 +17,8 @@ from pathlib import Path
 import sys
 from datetime import datetime, timezone
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+EVAL_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = EVAL_DIR.parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -31,22 +32,33 @@ def _latest_run_result(results_dir: Path) -> Path | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, help="Path to run_*.json (defaults to latest in eval/artifacts/raw/)")
-    parser.add_argument("--output", type=str, help="Path to write judge_results.json (defaults to eval/artifacts/judged/judge_results_<timestamp>.json)")
+    parser.add_argument(
+        "--input",
+        type=str,
+        help="Path to run_*.json (defaults to latest in eval/recommender_eval/artifacts/raw/)",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Path to write judge_results.json (defaults to eval/recommender_eval/artifacts/judged/judge_results_<timestamp>.json)",
+    )
     args = parser.parse_args()
 
     if not openai_is_configured():
         raise SystemExit("OpenAI is not configured. Set OPENAI_API_KEY to run the judge.")
 
-    raw_dir = PROJECT_ROOT / "eval" / "artifacts" / "raw"
-    judged_dir = PROJECT_ROOT / "eval" / "artifacts" / "judged"
+    raw_dir = EVAL_DIR / "artifacts" / "raw"
+    judged_dir = EVAL_DIR / "artifacts" / "judged"
 
     if args.input:
         input_path = Path(args.input)
     else:
         latest = _latest_run_result(raw_dir)
         if latest is None:
-            raise SystemExit("No run_*.json found in eval/artifacts/raw/. Run eval/run_retrieval_eval.py first.")
+            raise SystemExit(
+                "No run_*.json found in eval/recommender_eval/artifacts/raw/. "
+                "Run eval/recommender_eval/run_retrieval_eval.py first."
+            )
         input_path = latest
 
     if args.output:

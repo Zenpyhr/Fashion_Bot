@@ -4,8 +4,8 @@ This script produces ONE raw artifact for the current code/config, so you can
 track the judge score over time as you make changes.
 
 Usage:
-  python eval/run_retrieval_eval.py --file eval/queries_eval_10_mens.txt
-  python eval/run_retrieval_eval.py --enable-reranker true --file eval/queries_eval_10_mens.txt
+  python eval/recommender_eval/run_retrieval_eval.py --file eval/recommender_eval/queries_eval_10_mens.txt
+  python eval/recommender_eval/run_retrieval_eval.py --enable-reranker true --file eval/recommender_eval/queries_eval_10_mens.txt
 """
 
 from __future__ import annotations
@@ -16,7 +16,8 @@ from pathlib import Path
 import sys
 from datetime import datetime, timezone
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+EVAL_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = EVAL_DIR.parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -80,7 +81,11 @@ def main() -> None:
     )
     parser.add_argument("query", nargs="*", help="Query text")
     parser.add_argument("--file", type=str, help="Path to newline-delimited query file")
-    parser.add_argument("--output", type=str, help="Path to write JSON results (defaults to eval/artifacts/raw/run_<timestamp>.json)")
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Path to write JSON results (defaults to eval/recommender_eval/artifacts/raw/run_<timestamp>.json)",
+    )
     args = parser.parse_args()
 
     queries: list[str] = []
@@ -102,7 +107,7 @@ def main() -> None:
         output_path = Path(args.output)
     else:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        output_path = PROJECT_ROOT / "eval" / "artifacts" / "raw" / f"run_{stamp}.json"
+        output_path = EVAL_DIR / "artifacts" / "raw" / f"run_{stamp}.json"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {

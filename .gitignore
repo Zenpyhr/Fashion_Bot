@@ -216,9 +216,12 @@ data/raw/hm/*.zip
 data/processed/demo_images/
 Images/
 
-# Eval artifacts (large, local outputs)
-eval/artifacts/
-eval/artifacts/**/*.json
+# Recommender eval artifacts (large, local outputs)
+eval/recommender_eval/artifacts/
+eval/recommender_eval/artifacts/**/*.json
 
 # QA / RAG artifacts (Chroma persisted DB)
 data/qa/index/
+
+# Local / personal pipeline notes (kept working copy only)
+RECOMMENDER_PIPELINE.md

@@ -407,12 +407,14 @@ Fashion_Bot/
 │   │   └── vlm_enrichment.py
 │   └── database/
 ├── eval/
-│   ├── benchmark_queries.json
-│   ├── rubric.md
-│   ├── run_retrieval_eval.py
-│   ├── judge_retrieval_run.py
-│   ├── queries_eval_10_mens.txt
-│   └── artifacts/
+│   └── recommender_eval/
+│       ├── benchmark_queries.json
+│       ├── rubric.md
+│       ├── run_retrieval_eval.py
+│       ├── judge_retrieval_run.py
+│       ├── queries_eval_10_mens.txt
+│       ├── queries_dense_eval.txt
+│       └── artifacts/
 ├── tests/
 ├── scripts/
 └── data/
@@ -490,14 +492,14 @@ The UI also includes `user_id` in `/recommend` requests so you can see wardrobe 
 
 ### Recommender / retrieval (current scripts)
 
-Artifacts: `eval/artifacts/` (raw runs and judged JSON; many files are gitignored).
+Artifacts: `eval/recommender_eval/artifacts/` (raw runs and judged JSON; many files are gitignored).
 
 ```powershell
-python eval\run_retrieval_eval.py --file eval\queries_eval_10_mens.txt
-python eval\judge_retrieval_run.py
+python eval\recommender_eval\run_retrieval_eval.py --file eval\recommender_eval\queries_eval_10_mens.txt
+python eval\recommender_eval\judge_retrieval_run.py
 ```
 
-See `eval/rubric.md` for the judge rubric.
+See `eval/recommender_eval/rubric.md` for the judge rubric.
 
 ### Older / generic benchmark harness
 
@@ -520,4 +522,4 @@ use those as documented in older notes; otherwise prefer **`run_retrieval_eval.p
 4. Run `python scripts\run_api.py` and exercise `POST /recommend`.
 5. Optional: open `http://127.0.0.1:8000/` and use the Wardrobe panel to upload an image for `demo_user`, then run recommendations to see wardrobe items appear.
 6. (Optional) `docker compose up -d`, `python scripts\build_catalog_embeddings.py`, then enable dense retrieval in `.env`.
-7. Continue improving parsing, retrieval, and outfit quality using `eval/` runs.
+7. Continue improving parsing, retrieval, and outfit quality using `eval/recommender_eval/` runs.
