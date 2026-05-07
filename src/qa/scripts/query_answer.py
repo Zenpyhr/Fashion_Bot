@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
 
-# Ensure `.env` is loaded for local script runs and that LangChain can see the key.
+# Ensure .env is loaded for local script runs and that LangChain can see the key.
 try:
     from dotenv import load_dotenv
 
@@ -31,9 +31,8 @@ collection_name = "fashion_articles"
 default_top_k = 5
 embed_model_name = "all-MiniLM-L6-v2"
 llm_use = "gpt-5.4-mini"
-scope_confidence_high = 0.85
-scope_confidence_medium = 0.6
 scope_top_n = 3
+mix_scoped_ratio = 0.7
 url_list_file = QA_DATA_DIR / "url_list.json"
 
 _embed_model = None
@@ -190,14 +189,10 @@ def retrieve(
     top_k: int,
     db_path: str = db,
     return_scope_decision: bool = False,
+    retrieval_strategy: str = "mix",
 ) -> list[dict] | tuple[list[dict], dict]:
     model = get_embed_model()
     collection = get_vector_store(db_path)
-
-    allowed_scopes = get_allowed_scopes()
-    scope_decision = map_question_to_scopes(question, allowed_scopes)
-    top_scopes = scope_decision["top_scopes"]
-    top_confidence = scope_decision["top_confidence"]
 
     overfetch_k = max(top_k * 4, top_k)
     query_emb = model.embed_query(question)
@@ -205,64 +200,53 @@ def retrieve(
     selected = []
     seen_sources = set()
 
-    if top_scopes and top_confidence >= scope_confidence_high:
-        scope_decision["retrieval_mode"] = "scoped_high_confidence"
-        scoped_candidates = query_candidates(
-            collection,
-            query_emb,
-            n_results=overfetch_k,
-            where={"scope": {"$in": top_scopes}},
-        )
-        scoped_selected, seen_sources = select_diverse(scoped_candidates, top_k, seen_sources)
-        selected.extend(scoped_selected)
+    if retrieval_strategy not in {"mix", "global"}:
+        raise ValueError("retrieval_strategy must be one of: mix, global")
 
-        if len(selected) < top_k:
-            global_candidates = query_candidates(collection, query_emb, n_results=overfetch_k)
-            backfill, seen_sources = select_diverse(
-                global_candidates, top_k - len(selected), seen_sources
-            )
-            selected.extend(backfill)
+    scope_decision = {
+        "top_scopes": [],
+        "top_confidence": 0.0,
+        "mode": "global",
+        "retrieval_mode": "global_only",
+    }
 
-    elif top_scopes and scope_confidence_medium <= top_confidence < scope_confidence_high:
-        scope_decision["retrieval_mode"] = "mixed_medium_confidence"
-        scoped_target = max(1, top_k // 2)
-        global_target = max(1, top_k - scoped_target)
-
-        scoped_candidates = query_candidates(
-            collection,
-            query_emb,
-            n_results=overfetch_k,
-            where={"scope": {"$in": top_scopes}},
-        )
-        global_candidates = query_candidates(collection, query_emb, n_results=overfetch_k)
-
-        scoped_selected, seen_sources = select_diverse(
-            scoped_candidates, min(scoped_target, top_k), seen_sources
-        )
-        selected.extend(scoped_selected)
-
-        if len(selected) < top_k:
-            global_selected, seen_sources = select_diverse(
-                global_candidates, min(global_target, top_k - len(selected)), seen_sources
-            )
-            selected.extend(global_selected)
-
-        if len(selected) < top_k:
-            scoped_backfill, seen_sources = select_diverse(
-                scoped_candidates, top_k - len(selected), seen_sources
-            )
-            selected.extend(scoped_backfill)
-
-        if len(selected) < top_k:
-            global_backfill, seen_sources = select_diverse(
-                global_candidates, top_k - len(selected), seen_sources
-            )
-            selected.extend(global_backfill)
-
-    else:
-        scope_decision["retrieval_mode"] = "global_only"
+    if retrieval_strategy == "global":
         global_candidates = query_candidates(collection, query_emb, n_results=overfetch_k)
         selected, seen_sources = select_diverse(global_candidates, top_k, seen_sources)
+    else:
+        allowed_scopes = get_allowed_scopes()
+        scope_decision = map_question_to_scopes(question, allowed_scopes)
+        top_scopes = scope_decision["top_scopes"]
+
+        # Mixed retrieval: prioritize mapper scopes first, then fill remaining with global search.
+        if top_scopes:
+            scope_decision["retrieval_mode"] = "mixed_scoped_priority"
+
+            scoped_target = max(1, int(round(top_k * mix_scoped_ratio)))
+            global_candidates = query_candidates(collection, query_emb, n_results=overfetch_k)
+
+            scoped_candidates = query_candidates(
+                collection,
+                query_emb,
+                n_results=overfetch_k,
+                where={"scope": {"$in": top_scopes}},
+            )
+
+            scoped_selected, seen_sources = select_diverse(
+                scoped_candidates, min(scoped_target, top_k), seen_sources
+            )
+            selected.extend(scoped_selected)
+
+            if len(selected) < top_k:
+                remaining = top_k - len(selected)
+                global_selected, seen_sources = select_diverse(
+                    global_candidates, remaining, seen_sources
+                )
+                selected.extend(global_selected)
+        else:
+            scope_decision["retrieval_mode"] = "global_only_no_scope"
+            global_candidates = query_candidates(collection, query_emb, n_results=overfetch_k)
+            selected, seen_sources = select_diverse(global_candidates, top_k, seen_sources)
 
     if return_scope_decision:
         return selected, scope_decision
@@ -276,6 +260,11 @@ def llm_prompt(question: str, contexts: list[dict], detected_scopes: list[str] |
         context += f"Title: {item['title']}\n"
         context += f"URL: {item['url']}\n"
         context += f"Content: {item['text']}\n"
+    source_count = len(contexts)
+    source_registry = "\n".join(
+        f"{i}. [Source {i}] {item.get('title', '')} - {item.get('url', '')}"
+        for i, item in enumerate(contexts, start=1)
+    )
 
     scope_context = ""
     if detected_scopes:
@@ -296,18 +285,26 @@ If the context is incomplete or missing key information:
 
 ---
 
-Your response must follow this structure:
+First, run an evidence sufficiency gate before writing:
+- "Sufficient evidence" means the retrieved sources contain direct, relevant support for the core user question.
+- If the retrieved sources are definitely irrelevant to the question, or do not contain enough direct support for the core claims, you MUST use Insufficient Evidence Mode.
+- In Insufficient Evidence Mode, do not give trend advice from general knowledge.
+
+Sufficient Evidence Mode output structure:
 
 ### Answer
-Provide a clear and concise answer.
+Provide a clear and detailed answer in 2 to 3 short paragraphs.
 - Focus on practical and concrete insights (e.g., specific clothing items, styling elements, trends)
-- Use natural, conversational language
-- Ground your answer using phrases like "Based on the provided sources..."
+- Use natural, conversational language.
+- Include at least 4 concrete details from the context (items, silhouettes, fabrics, colors, or styling directions)
+- If seasonal evidence exists, briefly compare spring/summer vs fall/winter
+- End with one practical takeaway for how someone can apply the trends
 - If needed, include a short clarification of the question meaning
 
 ### Key Trends
 List distinct trends supported by the context:
 - Each bullet = ONE clear trend
+- Start each bullet with a short bold trend label like: **Trend label**: detail...
 - Include specific examples (e.g., sneakers, tracksuits, tennis skirts, jerseys)
 - Add inline citations like [Source 1]
 - Combine multiple sources for a trend when appropriate
@@ -320,10 +317,25 @@ Explain how the sources support the trends:
 - Summarize what each source contributes
 - Highlight overlaps or differences between sources when relevant
 - Keep explanations concise but informative
+- You must reference every source at least once in this section using [Source i].
 
 ### Sources
-List all cited sources:
-1. Title - URL
+List ALL provided sources exactly once, in numeric order from [Source 1] to [Source {source_count}], using this format:
+1. [Source i] Title - URL
+
+---
+
+Insufficient Evidence Mode output structure (use exactly this structure):
+
+### Answer
+I do not have enough reliable evidence in the retrieved sources to answer this question directly.
+
+### Key Trends
+- No supported trend can be concluded from the retrieved sources.
+
+### Evidence
+- The retrieved context does not contain enough direct, relevant evidence for the user question.
+- Briefly state what is missing (for example: missing topic coverage, missing timeframe, or missing item/category evidence).
 
 ---
 
@@ -333,6 +345,21 @@ Rules:
 - Do NOT copy text verbatim from the context
 - Prefer specific details over vague generalizations
 - Be transparent about uncertainty or gaps
+- Citation validity is strict: only cite sources in the range [Source 1] to [Source {source_count}]
+- Never output out-of-range citations such as [Source {source_count + 1}] or higher
+- If and only if you are in Sufficient Evidence Mode:
+  - Use every source ID from [Source 1] to [Source {source_count}] at least once in Key Trends or Evidence.
+  - In ### Sources, include all and only the provided sources, each exactly once, and keep source IDs consistent.
+- If you are in Insufficient Evidence Mode:
+  - Do not provide unsupported fashion advice.
+  - Do not claim trends, brands, numbers, or dates as facts.
+  - Follow the Insufficient Evidence Mode structure exactly.
+- Before final answer, self-check citation integrity and evidence sufficiency. Do not output extra commentary.
+
+---
+
+Provided source registry (must be preserved in the Sources section):
+{source_registry}
 
 ---
 
@@ -347,8 +374,8 @@ Answer:
 """.strip()
     return prompt 
 
-def generate_answer(prompt: str) -> str:
-    client = ChatOpenAI(model=llm_use, temperature=0.1)
+def generate_answer(prompt: str, source_count: int | None = None) -> str:
+    client = ChatOpenAI(model=llm_use, temperature=0)
 
     response = client.invoke(
         [
@@ -365,19 +392,23 @@ def generate_answer(prompt: str) -> str:
     return response.content.strip()
 
 
-def qa_answer(question):
+def qa_answer(question, retrieval_strategy: str = "mix"):
     question = question 
     top_k = default_top_k
     db_path = db
 
     contexts, scope_decision = retrieve(
-        question, top_k=top_k, db_path=db_path, return_scope_decision=True
+        question,
+        top_k=top_k,
+        db_path=db_path,
+        return_scope_decision=True,
+        retrieval_strategy=retrieval_strategy,
     )
     prompt = llm_prompt(question, contexts, detected_scopes=scope_decision.get("top_scopes", []))
-    ans = generate_answer(prompt)
+    ans = generate_answer(prompt, source_count=len(contexts))
     return ans
 
 if __name__ == "__main__":
-    question = "What is the overall seasonal fashion trend for year 2026?"
+    question = "How should I style wide-leg jeans in 2026 without looking sloppy?"
     output = qa_answer(question)
     print(output)

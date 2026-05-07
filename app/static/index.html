@@ -8,10 +8,19 @@
   </head>
   <body>
     <main class="shell">
-      <section class="workspace" aria-label="Outfit recommender">
+      <nav class="page-switch" aria-label="Feature switch">
+        <button class="page-tab is-active" type="button" data-page-target="recommend-page" aria-selected="true">
+          Recommendation
+        </button>
+        <button class="page-tab" type="button" data-page-target="qa-page" aria-selected="false">
+          Fashion QA
+        </button>
+      </nav>
+
+      <section id="recommend-page" class="workspace page-view" aria-label="Outfit recommender">
         <div class="query-panel">
-          <p class="eyebrow">Fashion Bot</p>
-          <h1>Build a look from the demo catalog</h1>
+          <p class="eyebrow">Fashion Recommendation</p>
+          <h1 class="app-title">Build a look from the demo catalog</h1>
           <details class="wardrobe-panel" open>
             <summary>Add wardrobe photo (demo)</summary>
             <form id="wardrobe-upload-form" class="wardrobe-form">
@@ -67,7 +76,31 @@
 
         <section id="results" class="results" aria-live="polite"></section>
       </section>
+
+      <section id="qa-page" class="workspace page-view is-hidden" aria-label="Fashion QA chatbot">
+        <div class="query-panel qa-panel">
+          <p class="eyebrow">Fashion QA</p>
+          <h1 class="app-title">Ask general fashion questions.</h1>
+          <div id="qa-chat-log" class="chat-log" aria-live="polite">
+            <article class="chat-empty">Ask your first fashion question to start the chat.</article>
+          </div>
+          <form id="qa-form" class="query-form">
+            <label for="qa-question">Question</label>
+            <div class="query-row">
+              <input
+                id="qa-question"
+                name="qa-question"
+                type="text"
+                autocomplete="off"
+                placeholder="e.g. How should I style wide-leg jeans this season?"
+              />
+              <button type="submit">Ask</button>
+            </div>
+          </form>
+          <p id="qa-status" class="status" role="status">Ready</p>
+        </div>
+      </section>
     </main>
-    <script src="/static/app.js?v=5"></script>
+    <script src="/static/app.js?v=6"></script>
   </body>
 </html>
