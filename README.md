@@ -140,9 +140,15 @@ QA response containing:
 
 ```bash
 python scripts/qa_build_db.py
-python scripts/qa_answer.py "What are Spring 2026 fashion trends?"
+python scripts/qa_answer.py "What are overall seasonal fashion trends in year 2026?"
 python eval/qa_eval/evaluation_qa.py
 ```
+
+### Evaluation
+
+We define 30 questions with ground truth fashion scope inside the `evaluation_qa.py` script. By running this script in the terminal, you will see the evaluation results:
+
+
 
 ## 4) Track B - Outfit Recommendation
 
