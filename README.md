@@ -15,7 +15,7 @@ cd Fashion_Bot
 ```
 
 
-The recommender dataset is not included in this repository because it is too large for GitHub.
+**The recommender dataset is not included in this repository because it is too large for GitHub.**
 
 You can download it here:
 
