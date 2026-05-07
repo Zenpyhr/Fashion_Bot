@@ -14,6 +14,7 @@ git clone https://github.com/Zenpyhr/Fashion_Bot.git
 cd Fashion_Bot
 ```
 
+
 The recommender dataset is not included in this repository because it is too large for GitHub.
 
 You can download it here:
@@ -25,8 +26,6 @@ After downloading, place the file directory under:
 ```text
 Fashion_Bot/data/recommender/processed/
 ```
-
-Run all remaining commands in this README from the `Fashion_Bot` directory.
 
 ## 1) Working environment setup and dependencies
 
