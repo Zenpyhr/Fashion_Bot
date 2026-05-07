@@ -150,6 +150,10 @@ We define 30 questions with ground truth fashion scope inside the `evaluation_qa
 
 ![QA Evaluation](qa_evaluation.png)
 
+Sample Answer:
+
+![QA answer](qa_sample1.png)
+![QA answer2](qa_sample2.png)
 
 
 ## 4) Track B - Outfit Recommendation
