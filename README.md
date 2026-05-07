@@ -125,7 +125,7 @@ QA response containing:
 - `app/routes/qa.py`
 - `eval/qa_eval/evaluation_qa.py`
 
-### File responsibilities (Track A)
+### File explanation
 
 - `src/qa/scripts/web_scraping.py`: loads scoped URLs from `data/qa/url_list.json`, scrapes article text, removes boilerplate/paywall-like content, and saves raw `.txt` files with URL/scope/title headers.
 - `src/qa/scripts/process_for_rag.py`: cleans raw article text, removes duplicates, performs sentence-aware chunking (target 150 words, 40 overlap), and writes `fashion_qa_articles_clean.jsonl` plus `fashion_qa_chunks.jsonl`.
@@ -182,7 +182,7 @@ Recommendation response containing:
 - `scripts/test_recommender.py`
 - `scripts/build_catalog_embeddings.py`
 
-### File responsibilities (Track B)
+### File explanation
 
 - `src/recommender/outfits.py`: main pipeline orchestrator; parses request, retrieves candidates, composes outfits, reranks, and builds final recommendation output.
 - `src/recommender/query_parser.py`: converts user text into structured constraints (occasion, formality, category/color hints, etc.) with deterministic rules and optional LLM refinement.
