@@ -148,6 +148,8 @@ python eval/qa_eval/evaluation_qa.py
 
 We define 30 questions with ground truth fashion scope inside the `evaluation_qa.py` script. By running this script in the terminal, you will see the evaluation results:
 
+![QA Evaluation](qa_evaluation.png)
+
 
 
 ## 4) Track B - Outfit Recommendation
