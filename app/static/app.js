@@ -95,10 +95,13 @@ function formatQaInline(text) {
     /(https?:\/\/[^\s)]+)/g,
     '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
   );
-  content = content.replace(
-    /\[Source\s+(\d+)\]/gi,
-    '<span class="qa-citation">[Source $1]</span>',
-  );
+  content = content.replace(/\[([^\]]+)\]/gi, (match, inner) => {
+    const ids = Array.from(inner.matchAll(/Source\s+(\d+)/gi)).map((item) => item[1]);
+    if (!ids.length) {
+      return match;
+    }
+    return ids.map((id) => `<span class="qa-citation">Source ${id}</span>`).join(" ");
+  });
   return content;
 }
 
@@ -160,28 +163,17 @@ function sourceListMarkup(payload) {
     return "";
   }
 
-  const deduped = [];
-  const seen = new Set();
-
-  for (const source of sources) {
-    const key = `${source?.title || ""}::${source?.url || ""}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    deduped.push(source);
-  }
-
   return `
     <ol class="qa-source-list">
-      ${deduped
+      ${sources
         .map((source, index) => {
+          const sourceLabel = escapeHtml(String(source?.source_id || `Source ${index + 1}`));
           const title = escapeHtml(source?.title || `Source ${index + 1}`);
           const url = source?.url ? String(source.url).trim() : "";
           if (!url) {
-            return `<li>${title}</li>`;
+            return `<li><span class="qa-source-label">${sourceLabel}</span>: ${title}</li>`;
           }
-          return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${title}</a></li>`;
+          return `<li><span class="qa-source-label">${sourceLabel}</span>: <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${title}</a></li>`;
         })
         .join("")}
     </ol>
