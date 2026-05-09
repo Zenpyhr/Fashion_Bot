@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Scrape fashion article URLs into plain-text files for the QA pipeline."""
 
 import json
 import re
@@ -47,6 +48,8 @@ paywall_patterns = [
 
 
 def _is_boilerplate(text: str) -> bool:
+    """Return True when a paragraph looks like site navigation or legal text."""
+
     normalized = text.strip().lower()
     if not normalized:
         return True
@@ -54,11 +57,15 @@ def _is_boilerplate(text: str) -> bool:
 
 
 def _looks_like_paywall(text: str) -> bool:
+    """Detect common paywall or signup language in extracted article text."""
+
     normalized = text.strip().lower()
     return any(re.search(pattern, normalized, flags=re.IGNORECASE) for pattern in paywall_patterns)
 
 
 def _extract_title(soup: BeautifulSoup) -> str:
+    """Pick the best available article title from h1, OpenGraph, or page title."""
+
     h1 = soup.find("h1")
     if h1 and h1.get_text(strip=True):
         return h1.get_text(" ", strip=True)
@@ -74,6 +81,8 @@ def _extract_title(soup: BeautifulSoup) -> str:
 
 
 def _select_content_root(soup: BeautifulSoup):
+    """Find the HTML node most likely to contain the main article content."""
+
     selectors = [
         "article",
         "main article",
@@ -88,6 +97,8 @@ def _select_content_root(soup: BeautifulSoup):
 
 
 def _extract_clean_text(soup: BeautifulSoup) -> str:
+    """Remove non-content elements and collect readable article paragraphs."""
+
     for tag in soup(["script", "style", "noscript", "header", "footer", "nav", "aside", "form"]):
         tag.decompose()
 
@@ -95,6 +106,7 @@ def _extract_clean_text(soup: BeautifulSoup) -> str:
     paragraphs = []
     seen = set()
 
+    # Paragraph extraction is the preferred path for article pages.
     for p in root.find_all("p"):
         text = p.get_text(" ", strip=True)
         text = re.sub(r"\s+([,.;:!?])", r"\1", text)
@@ -126,6 +138,8 @@ def _extract_clean_text(soup: BeautifulSoup) -> str:
 
 
 def _validate_extracted_text(text: str, min_words: int) -> None:
+    """Reject pages that did not yield enough usable article content."""
+
     word_count = len(re.findall(r"\b\w+\b", text))
     if word_count < min_words:
         raise RuntimeError(
@@ -142,6 +156,8 @@ def scrape_article_to_txt(
     output_dir: Path = output_dir,
     min_words: int = min_words,
 ) -> Path:
+    """Download one URL, extract article text, and save it with metadata headers."""
+
     response = requests.get(url, timeout=20, headers=request_headers)
     response.raise_for_status()
 
@@ -150,6 +166,7 @@ def scrape_article_to_txt(
     text = _extract_clean_text(soup)
     _validate_extracted_text(text, min_words=min_words)
 
+    # Sanitize values before using them in the output filename.
     safe_title = re.sub(r"[^a-zA-Z0-9_-]+", "_", title).strip("_")[:80] or "article"
     domain = urlparse(url).netloc.replace(".", "_")
 
@@ -167,6 +184,8 @@ def scrape_article_to_txt(
 
 
 def load_scoped_urls(path: Path) -> dict[str, list[str]]:
+    """Load url_list.json and validate its scope-to-URLs structure."""
+
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"Expected a JSON object at {path}, got {type(data).__name__}.")
@@ -182,6 +201,7 @@ def load_scoped_urls(path: Path) -> dict[str, list[str]]:
 
 
 if __name__ == "__main__":
+    # Run the scraper across every configured fashion scope.
     scoped_urls = load_scoped_urls(url_list_path)
     total_urls = sum(len(urls) for urls in scoped_urls.values())
     print(f"Loaded {total_urls} URLs across {len(scoped_urls)} scopes from {url_list_path}")

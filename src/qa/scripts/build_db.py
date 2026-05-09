@@ -1,3 +1,5 @@
+"""Embed processed QA chunks and store them in the local Chroma database."""
+
 import json
 from pathlib import Path
 
@@ -13,11 +15,15 @@ batch_size = 32
 embed_model_name = "all-MiniLM-L6-v2"
 
 def main() -> None:
+    """Build or update the vector database from processed article chunks."""
+
+    # Use normalized embeddings so distance comparisons are more consistent.
     model = HuggingFaceEmbeddings(
         model_name=embed_model_name,
         encode_kwargs={"normalize_embeddings": True},
     )
 
+    # Chroma stores the article chunks and their metadata for later retrieval.
     vector_store = Chroma(
         collection_name=name,
         persist_directory=str(db_dir),
@@ -27,6 +33,7 @@ def main() -> None:
 
     documents, metadatas, ids = [], [], []
 
+    # Read each JSONL chunk and preserve metadata needed for citations.
     with open(chunk_file, "r", encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             item = json.loads(line)
@@ -44,6 +51,7 @@ def main() -> None:
             metadatas.append(metadata)
             ids.append(doc_id)
 
+    # Insert chunks in batches so large article sets do not create one huge request.
     for start in range(0, len(documents), batch_size):
         end = start + batch_size
         batch_docs = documents[start:end]

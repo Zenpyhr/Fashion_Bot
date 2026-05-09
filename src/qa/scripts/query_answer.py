@@ -1,3 +1,5 @@
+"""Retrieve fashion QA context from Chroma and generate grounded LLM answers."""
+
 import json
 import os
 from pathlib import Path
@@ -42,8 +44,11 @@ _vector_store_path = None
 
 
 def get_embed_model() -> HuggingFaceEmbeddings:
+    """Create the embedding model once and reuse it across queries."""
+
     global _embed_model
     if _embed_model is None:
+        # Normalized embeddings make similarity search more stable for cosine-style distance.
         _embed_model = HuggingFaceEmbeddings(
             model_name=embed_model_name,
             encode_kwargs={"normalize_embeddings": True},
@@ -52,8 +57,11 @@ def get_embed_model() -> HuggingFaceEmbeddings:
 
 
 def get_vector_store(db_path: str = db) -> Chroma:
+    """Create or reuse the Chroma vector store for the selected database path."""
+
     global _vector_store, _vector_store_path
     if _vector_store is None or _vector_store_path != db_path:
+        # Recreate the store only when the caller switches to a different database path.
         _vector_store = Chroma(
             collection_name=collection_name,
             persist_directory=db_path,
@@ -64,11 +72,15 @@ def get_vector_store(db_path: str = db) -> Chroma:
 
 
 def load_allowed_scopes(path: Path = url_list_file) -> list[str]:
+    """Load the valid fashion scopes from the URL configuration file."""
+
     data = json.loads(path.read_text(encoding="utf-8"))
     return sorted(data.keys())
 
 
 def get_allowed_scopes() -> list[str]:
+    """Cache allowed scopes so repeated QA requests avoid re-reading JSON."""
+
     global _allowed_scopes
     if _allowed_scopes is None:
         _allowed_scopes = load_allowed_scopes()
@@ -76,7 +88,10 @@ def get_allowed_scopes() -> list[str]:
 
 
 def map_question_to_scopes(question: str, allowed_scopes: list[str]) -> dict:
+    """Ask the LLM to map a user question to the closest configured scopes."""
+
     client = ChatOpenAI(model=llm_use, temperature=0)
+    # Scope classification narrows retrieval to the most relevant fashion categories.
     prompt = (
         "Classify the user question into fashion scopes.\n"
         f"Allowed scopes: {allowed_scopes}\n"
@@ -97,11 +112,13 @@ def map_question_to_scopes(question: str, allowed_scopes: list[str]) -> dict:
         ]
     )
     content = response.content.strip()
+    # The classifier is instructed to return JSON only, so parse it into a dict.
     parsed = json.loads(content)
 
     unknown = parsed.get("unknown", False)
     raw_scopes = parsed.get("scopes", [])
 
+    # Keep only valid scopes and the highest confidence for each scope.
     best_by_scope = {}
     for item in raw_scopes:
         scope = item.get("scope")
@@ -112,6 +129,7 @@ def map_question_to_scopes(question: str, allowed_scopes: list[str]) -> dict:
             best_by_scope[scope] = confidence
 
     ranked = sorted(best_by_scope.items(), key=lambda x: x[1], reverse=True)
+    # Keep only the strongest few scopes so retrieval stays focused.
     top_scopes = [scope for scope, _ in ranked[:scope_top_n]]
     top_confidence = ranked[0][1] if ranked else 0.0
     mode = "unknown" if unknown or not top_scopes else "scoped"
@@ -125,14 +143,18 @@ def map_question_to_scopes(question: str, allowed_scopes: list[str]) -> dict:
 def query_candidates(
     collection, query_emb: list[float], n_results: int, where: dict | None = None
 ) -> list[dict]:
+    """Query Chroma and normalize raw results into candidate context records."""
+
     query_kwargs = {
         "query_embeddings": [query_emb],
         "n_results": n_results,
         "include": ["documents", "metadatas", "distances"],
     }
     if where:
+        # The where filter lets mixed retrieval search only inside predicted scopes.
         query_kwargs["where"] = where
 
+    # Query Chroma directly with the already-computed question embedding.
     results = collection._collection.query(**query_kwargs)
     docs = results["documents"][0]
     metas = results["metadatas"][0]
@@ -140,6 +162,7 @@ def query_candidates(
 
     candidates = []
     for idx, (text, meta, distance) in enumerate(zip(docs, metas, distances), start=1):
+        # Source keys help avoid returning many near-duplicate chunks from one article.
         source_key = (
             meta.get("article_id")
             or meta.get("url")
@@ -163,6 +186,8 @@ def query_candidates(
 def select_diverse(
     candidates: list[dict], limit: int, seen_sources: set | None = None
 ) -> tuple[list[dict], set]:
+    """Select top candidates while preferring coverage across different articles."""
+
     if seen_sources is None:
         seen_sources = set()
 
@@ -173,13 +198,16 @@ def select_diverse(
     for item in candidates:
         source_key = item.get("source_key")
         if source_key not in seen_sources:
+            # First pass favors new articles so the final context is not one repeated source.
             unique_first_pass.append(item)
             seen_sources.add(source_key)
         else:
+            # Repeated articles are kept as fallback in case we still need more chunks.
             fallback_chunks.append(item)
 
     selected = unique_first_pass[:limit]
     if len(selected) < limit:
+        # If there are not enough unique articles, fill from duplicate-source chunks.
         selected.extend(fallback_chunks[: limit - len(selected)])
     return selected, seen_sources
 
@@ -191,9 +219,12 @@ def retrieve(
     return_scope_decision: bool = False,
     retrieval_strategy: str = "mix",
 ) -> list[dict] | tuple[list[dict], dict]:
+    """Retrieve relevant chunks using global search or scope-aware mixed search."""
+
     model = get_embed_model()
     collection = get_vector_store(db_path)
 
+    # Overfetch so diversity filtering still has enough candidates to choose from.
     overfetch_k = max(top_k * 4, top_k)
     query_emb = model.embed_query(question)
 
@@ -211,10 +242,12 @@ def retrieve(
     }
 
     if retrieval_strategy == "global":
+        # Global retrieval ignores scope labels and searches the whole vector database.
         global_candidates = query_candidates(collection, query_emb, n_results=overfetch_k)
         selected, seen_sources = select_diverse(global_candidates, top_k, seen_sources)
     else:
         allowed_scopes = get_allowed_scopes()
+        # Mixed retrieval first predicts likely scopes for the question.
         scope_decision = map_question_to_scopes(question, allowed_scopes)
         top_scopes = scope_decision["top_scopes"]
 
@@ -222,9 +255,12 @@ def retrieve(
         if top_scopes:
             scope_decision["retrieval_mode"] = "mixed_scoped_priority"
 
+            # Reserve about 70 percent of results for scoped matches, then backfill globally.
             scoped_target = max(1, int(round(top_k * mix_scoped_ratio)))
+            # Global candidates are fetched early so they can fill gaps after scoped selection.
             global_candidates = query_candidates(collection, query_emb, n_results=overfetch_k)
 
+            # Scoped candidates search only chunks whose metadata scope matches the classifier.
             scoped_candidates = query_candidates(
                 collection,
                 query_emb,
@@ -238,6 +274,7 @@ def retrieve(
             selected.extend(scoped_selected)
 
             if len(selected) < top_k:
+                # Backfill from global search to avoid missing useful context outside predicted scopes.
                 remaining = top_k - len(selected)
                 global_selected, seen_sources = select_diverse(
                     global_candidates, remaining, seen_sources
@@ -245,6 +282,7 @@ def retrieve(
                 selected.extend(global_selected)
         else:
             scope_decision["retrieval_mode"] = "global_only_no_scope"
+            # If the classifier cannot find a useful scope, fall back to normal semantic search.
             global_candidates = query_candidates(collection, query_emb, n_results=overfetch_k)
             selected, seen_sources = select_diverse(global_candidates, top_k, seen_sources)
 
@@ -254,13 +292,17 @@ def retrieve(
 
 
 def llm_prompt(question: str, contexts: list[dict], detected_scopes: list[str] | None = None) -> str:
+    """Build the answer prompt with source context and strict citation rules."""
+
     context = ""
     for i, item in enumerate(contexts, start=1):
+        # Number each retrieved chunk so the LLM can cite it as [Source i].
         context += f"\n[Source {i}]\n"
         context += f"Title: {item['title']}\n"
         context += f"URL: {item['url']}\n"
         context += f"Content: {item['text']}\n"
     source_count = len(contexts)
+    # The registry gives the model an exact source list to reproduce in the final answer.
     source_registry = "\n".join(
         f"{i}. [Source {i}] {item.get('title', '')} - {item.get('url', '')}"
         for i, item in enumerate(contexts, start=1)
@@ -268,8 +310,10 @@ def llm_prompt(question: str, contexts: list[dict], detected_scopes: list[str] |
 
     scope_context = ""
     if detected_scopes:
+        # Include detected scopes as extra context, but the article chunks remain the main evidence.
         scope_context = f"\nDetected scopes: {detected_scopes}\n"
 
+    # The prompt forces an evidence check before answering to reduce hallucinated trend advice.
     prompt = f"""
 You are an experienced fashion assistant specializing in trends and outfit analysis.
 
@@ -375,8 +419,11 @@ Answer:
     return prompt 
 
 def generate_answer(prompt: str, source_count: int | None = None) -> str:
+    """Send the grounded QA prompt to the chat model and return its answer."""
+
     client = ChatOpenAI(model=llm_use, temperature=0)
 
+    # Temperature 0 makes the answer more deterministic and citation-following.
     response = client.invoke(
         [
             SystemMessage(
@@ -393,10 +440,13 @@ def generate_answer(prompt: str, source_count: int | None = None) -> str:
 
 
 def qa_answer(question, retrieval_strategy: str = "mix"):
+    """End-to-end QA helper used by the app and command-line script."""
+
     question = question 
     top_k = default_top_k
     db_path = db
 
+    # Retrieve relevant article chunks and keep the scope decision for prompt context.
     contexts, scope_decision = retrieve(
         question,
         top_k=top_k,
@@ -404,6 +454,7 @@ def qa_answer(question, retrieval_strategy: str = "mix"):
         return_scope_decision=True,
         retrieval_strategy=retrieval_strategy,
     )
+    # Build a grounded prompt from retrieved chunks, then ask the LLM to answer with citations.
     prompt = llm_prompt(question, contexts, detected_scopes=scope_decision.get("top_scopes", []))
     ans = generate_answer(prompt, source_count=len(contexts))
     return ans
