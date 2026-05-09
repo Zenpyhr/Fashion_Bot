@@ -169,6 +169,8 @@ def _dense_rerank_role_pool(role_df: pd.DataFrame, constraints: dict) -> pd.Data
             source_series = pd.Series(["catalog"] * len(item_ids), index=role_df.index)
 
         wardrobe_user_id = str(constraints.get("user_id") or "").strip() or None
+        # Catalog and wardrobe embeddings live in separate tables, so split ids here
+        # and then merge their dense scores back into one reranked shortlist.
         wardrobe_ids = [
             str(item_id)
             for item_id, source in zip(item_ids, source_series.tolist(), strict=False)
@@ -397,6 +399,9 @@ def _score_guardrails(row: pd.Series, constraints: dict) -> int:
 
     score = 0
 
+    # These heuristics are intentionally light-touch: they nudge obviously bad
+    # matches down without preventing the ranker from using them if the pool is thin.
+
     # Not sporty: penalize sport theme and explicitly sporty categories.
     if intents["not_sporty"]:
         if section_theme == "sport":
@@ -465,6 +470,8 @@ def _select_diverse_role_candidates(role_df: pd.DataFrame, role: str, limit: int
         category = str(row["normalized_category"])
         current_count = category_counts.get(category, 0)
 
+        # Cap per-category picks so one strong cluster, like many near-identical
+        # trousers or sneakers, does not drown out the rest of the role pool.
         if current_count >= per_category_limit:
             continue
 
@@ -542,6 +549,8 @@ def retrieve_candidates_by_role(constraints: dict) -> dict[str, list[dict]]:
 
                 # Score wardrobe items with the same query-aware logic as catalog rows,
                 # then give a small ownership bonus so they can win close calls.
+                # This keeps catalog and wardrobe candidates in one comparable pool
+                # before the optional dense rerank step reorders them together.
                 WARDROBE_BOOST = 3
                 for item in wardrobe_items:
                     if str(item.get("recommendation_role") or "") != role:

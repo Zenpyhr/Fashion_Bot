@@ -189,6 +189,8 @@ def _merge_llm_constraints(base: dict, overrides: dict | None) -> dict:
         return base
 
     merged = dict(base)
+    # Only merge a narrow whitelist so the LLM can refine intent without reshaping
+    # the full request schema or injecting unexpected keys downstream.
     for key in (
         "semantic_query",
         "target_group",

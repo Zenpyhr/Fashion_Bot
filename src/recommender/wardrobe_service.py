@@ -77,6 +77,8 @@ def ingest_wardrobe_image(
         raise FileNotFoundError(f"Wardrobe image not found: {src}")
 
     content_hash = _sha256_file(src)
+    # Use the file hash as the stable wardrobe id so repeated uploads of the same
+    # garment collapse to one logical item even if filenames differ.
     wardrobe_item_id = content_hash[:16]  # short stable id for UI/URLs
     ext = (src.suffix or ".jpg").lower()
 
@@ -115,6 +117,8 @@ def ingest_wardrobe_image(
     # Store an embedding for this wardrobe item so dense retrieval can use it.
     item_text = build_item_text(row.item)
     if item_text.strip():
+        # Reuse the same text representation style as catalog embeddings so wardrobe
+        # and catalog items stay comparable during dense reranking.
         embedding_model = settings.openai_embedding_model
         vector_dim = infer_vector_dim(embedding_model)
         pg_engine = create_pg_engine()

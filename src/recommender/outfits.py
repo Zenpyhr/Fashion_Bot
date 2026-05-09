@@ -141,6 +141,8 @@ def _select_top_diverse_outfits(ranked_outfits: list[dict], limit: int = 3) -> l
         non_overlapping = [c for c in remaining if _candidate_item_ids(c).isdisjoint(used_item_ids)]
 
         if non_overlapping:
+            # Once we have one strong outfit, prefer follow-ups that do not reuse
+            # the same exact items, so the final three suggestions feel genuinely different.
             novel_disjoint = [
                 c for c in non_overlapping if _outfit_category_signature(c) not in selected_category_signatures
             ]
@@ -177,6 +179,8 @@ def _select_top_diverse_outfits(ranked_outfits: list[dict], limit: int = 3) -> l
 def _prepare_outfits_for_llm(ranked_outfits: list[dict]) -> list[dict]:
     prepared = []
     for index, outfit in enumerate(ranked_outfits[:8], start=1):
+        # Send the LLM a compact, stable summary of each outfit rather than the full
+        # internal item payload, which keeps prompts smaller and easier to validate.
         prepared.append(
             {
                 "outfit_id": f"outfit_{index}",
@@ -293,6 +297,8 @@ def _outfits_from_llm_compose(
             item = lookup.get(role, {}).get(sid)
             if item is None:
                 return None
+            # Reject repeated item_ids across all three outfits so the LLM path
+            # still yields distinct looks instead of minor variations of one pick.
             if sid in used_ids:
                 return None
             used_ids.add(sid)
@@ -420,6 +426,8 @@ def build_outfits(user_query: str, *, user_id: str | None = None) -> dict:
 
     reranker_source = "deterministic"
     if combo_builder_source != "openai" and openai_is_configured() and settings.enable_openai_reranker:
+        # Skip the extra rerank call when the combo-builder LLM already returned
+        # the final three outfits; otherwise use the reranker to reorder a shortlist.
         reranked_outfits = _apply_llm_reranking(user_query, constraints, ranked_outfits)
         if reranked_outfits is not ranked_outfits:
             reranker_source = "openai"

@@ -102,6 +102,8 @@ def rank_outfits(candidates_by_role: dict[str, list[dict]], constraints: dict) -
     if any(not candidates_by_role.get(role) for role in required_roles):
         return []
 
+    # Keep the Cartesian product bounded so deterministic ranking stays cheap
+    # even when each role pool contains many viable candidates.
     trimmed_role_pools = {
         role: candidates_by_role[role][: 4 if role != "outerwear" else 3]
         for role in required_roles
