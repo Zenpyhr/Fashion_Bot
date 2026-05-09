@@ -15,13 +15,17 @@ cd Fashion_Bot
 ```
 
 
-**The recommender dataset is not included in this repository because it is too large for GitHub.**
+**The Track B recommender dataset is not fully included in this repository because it is too large for GitHub.**
 
-You can download it here:
+Track B is built from the **H&M Personalized Fashion Recommendations** dataset:
 
-[Download recommender dataset from Google Drive](https://drive.google.com/file/d/1dfT4U9s_TT40qG8F76-ubQV0LO3tZi6y/view?usp=drive_link)
+[H&M Personalized Fashion Recommendations (Kaggle)](https://www.kaggle.com/competitions/h-and-m-personalized-fashion-recommendations)
 
-After downloading, place the file directory under:
+For this repo, we use a smaller processed demo subset for local development. You can download that processed recommender data bundle here:
+
+[Download processed recommender demo data from Google Drive](https://drive.google.com/file/d/1dfT4U9s_TT40qG8F76-ubQV0LO3tZi6y/view?usp=drive_link)
+
+After downloading, place the directory under:
 
 ```text
 Fashion_Bot/data/recommender/processed/
@@ -57,6 +61,8 @@ cp .env.example .env
 
 If `python3.11` is not available on your machine, use `python3`.
 
+Before running the API, scripts, or tests, activate the repo's `.venv`. If you are also using Conda, prefer the project virtual environment over the base Conda environment for this repo.
+
 ### Environment config
 
 Edit `.env` and set at least:
@@ -72,6 +78,8 @@ Keep the defaults unless you intentionally want a different setup.
 ```bash
 docker compose up -d
 ```
+
+Docker is optional for QA and basic Track B sparse recommendations. It is required for Track B dense retrieval reranking and wardrobe embedding storage.
 
 ### Step 2: Build QA index (Track A)
 
@@ -173,6 +181,13 @@ Sample Answer:
 
 Generate outfit recommendations from user intent plus catalog data (and optional wardrobe items).
 
+### Current scope
+
+- The current local demo catalog is a **5,000-item processed subset** for faster development and demos.
+- The current default demo setup is **men-focused**; if the query does not specify a target group, the parser defaults to `men`.
+- The recommender always tries to assemble a base outfit from `top + bottom + shoes`.
+- `outerwear` is added when the query or weather cues imply layering, cold, or rain.
+
 ### Main responsibilities
 
 - Parse user query into outfit constraints.
@@ -190,6 +205,15 @@ Recommendation response containing:
 - `explanations`
 - `missing_items`
 
+### Dataset and demo subset
+
+- Source dataset: **H&M Personalized Fashion Recommendations** on Kaggle.
+- Raw recommender assets belong under `data/recommender/raw/hm/`, including `articles.csv` and the raw product images.
+- The repo's default demo catalog is the processed `catalog_items_demo.csv` subset.
+- The current demo summary contains **5,000 items** in `data/recommender/processed/catalog_items/catalog_items_demo_summary.json`.
+- The subset/image bundle can be regenerated from the full catalog with `scripts/build_demo_image_subset.py`.
+- The raw H&M files are only needed if you want to rebuild the processed catalog or regenerate the demo subset; they are not required just to run the shipped demo setup.
+
 ### Key files
 
 - `src/recommender/outfits.py`
@@ -203,6 +227,7 @@ Recommendation response containing:
 - `app/routes/recommend.py`
 - `app/routes/wardrobe.py`
 - `scripts/test_recommender.py`
+- `scripts/build_demo_image_subset.py`
 - `scripts/build_catalog_embeddings.py`
 
 ### File explanation
@@ -217,6 +242,7 @@ Recommendation response containing:
 - `src/recommender/vlm_tagging.py`: tags wardrobe images with vision model output into catalog-like metadata schema.
 - `app/routes/recommend.py`: `/recommend` API endpoint returning parsed constraints, outfits, explanations, and missing items.
 - `app/routes/wardrobe.py`: wardrobe upload/clear endpoints for user-owned item flows.
+- `scripts/build_demo_image_subset.py`: builds the smaller demo image/catalog subset from the full H&M catalog.
 - `scripts/build_catalog_embeddings.py`: builds/refreshes catalog item embeddings in Postgres/pgvector for dense retrieval.
 - `scripts/test_recommender.py`: local CLI smoke test for recommendation behavior and flags.
 
@@ -225,6 +251,31 @@ Recommendation response containing:
 ```bash
 python scripts/test_recommender.py
 python scripts/run_api.py
+```
+
+`python scripts/build_catalog_embeddings.py` is only needed when you want to enable dense retrieval with `ENABLE_DENSE_RETRIEVAL_RERANK=true`.
+
+### Frontend demo
+
+Branch B frontend demo showing wardrobe upload, natural-language query input, and three generated outfit recommendations:
+
+![Track B frontend demo](recommender_sample.png)
+
+### Wardrobe flow
+
+- Upload one image with `POST /wardrobe/upload` using `user_id` plus an image file.
+- Clear a user's wardrobe state with `POST /wardrobe/clear`.
+- Include the same `user_id` in `POST /recommend` so uploaded wardrobe items can be merged into the candidate pools.
+- Wardrobe-assisted recommendations work best when Postgres/pgvector and embeddings are enabled, but the recommender still runs in catalog-only sparse mode without them.
+
+### Example API request
+
+```json
+POST /recommend
+{
+  "user_query": "Build me a smart casual blue outfit for autumn",
+  "user_id": "147"
+}
 ```
 
 Optional dense retrieval setup:
@@ -236,6 +287,19 @@ python scripts/check_catalog_embeddings_db.py
 ```
 
 Then set `ENABLE_DENSE_RETRIEVAL_RERANK=true` in `.env`.
+
+Dense retrieval reranks each role-based sparse shortlist using embeddings stored in Postgres/pgvector. Without that setup, the recommender still works using sparse metadata scoring only.
+
+### Evaluation snapshot
+
+Branch B evaluation summary across sparse/dense catalog retrieval and wardrobe-assisted variants:
+
+![Track B evaluation snapshot](recommender_eval.png)
+
+### Troubleshooting
+
+- If imports or dependencies appear to be missing, first activate `.venv` and rerun `pip install -r requirements.txt`.
+- If Track B returns results but dense reranking or wardrobe-assisted retrieval is not working, confirm Docker is running and the embeddings setup steps were completed.
 
 ## 5) Data and folder map (quick reference)
 
