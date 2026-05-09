@@ -47,7 +47,6 @@ class QAResponse(BaseModel):
 
 class RecommendationRequest(BaseModel):
     user_query: str = Field(..., min_length=1)
-    use_owned_only: bool = False
     user_id: str | None = None
 
 

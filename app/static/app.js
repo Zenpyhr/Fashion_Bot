@@ -278,7 +278,6 @@ async function fetchRecommendations(query) {
     signal: recommendAbortController.signal,
     body: JSON.stringify({
       user_query: query,
-      use_owned_only: false,
       user_id: wardrobeUserIdInput?.value?.trim() || null,
     }),
   });
