@@ -1,3 +1,5 @@
+"""Evaluate the fashion QA RAG pipeline with retrieval and grounding metrics."""
+
 import json
 from pathlib import Path
 import sys
@@ -11,11 +13,13 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.qa.scripts import query_answer
 
+# Use the same number of retrieved chunks that the app uses for answers.
 top_k = 5
 judge_model = "gpt-5.4-mini"
 # query_answer.retrieve supports: "mix", "global"
 retrieval_strategy = "global"  # options: mix, global
 
+# Each test case pairs a user-style question with the scopes retrieval should find.
 test_cases = [
     {
         "question": "What are the biggest seasonal fashion trends for spring and summer 2026?",
@@ -144,6 +148,8 @@ test_cases = [
 
 
 def build_db_path() -> str:
+    """Return the Chroma DB path and fail early if the index has not been built."""
+
     db_path = Path(query_answer.db).resolve()
     if not db_path.exists():
         raise FileNotFoundError(
@@ -154,14 +160,20 @@ def build_db_path() -> str:
 
 
 def score_scope_recall_at_k(contexts: list[dict], expected_scopes: list[str]) -> float:
+    """Measure how many expected scopes appeared in the retrieved top-k chunks."""
+
     expected_set = set(expected_scopes)
+    # Convert retrieved chunk metadata into a set so each scope counts at most once.
     retrieved_set = {item.get("scope", "") for item in contexts if item.get("scope", "")}
     hit_set = expected_set.intersection(retrieved_set)
     return len(hit_set) / len(expected_set)
 
 
 def score_scope_precision_at_k(contexts: list[dict], expected_scopes: list[str]) -> float:
+    """Measure what fraction of retrieved chunks belong to an expected scope."""
+
     expected_set = set(expected_scopes)
+    # Precision uses the full retrieved list, so repeated scopes/chunks still count.
     retrieved_scopes = [item.get("scope", "") for item in contexts if item.get("scope", "")]
     if not retrieved_scopes:
         return 0.0
@@ -170,22 +182,29 @@ def score_scope_precision_at_k(contexts: list[dict], expected_scopes: list[str])
 
 
 def score_scope_rr(contexts: list[dict], expected_scopes: list[str]) -> float:
+    """Calculate reciprocal rank of the first retrieved chunk with an expected scope."""
+
     expected_set = set(expected_scopes)
     for rank, item in enumerate(contexts, start=1):
+        # Earlier hits receive a higher score because useful context was ranked sooner.
         if item.get("scope", "") in expected_set:
             return 1.0 / rank
     return 0.0
 
 
 def judge_support_score(question: str, contexts: list[dict], answer: str, client: OpenAI) -> int:
+    """Use an LLM judge to score whether the generated answer is grounded in context."""
+
     context_lines = []
     for idx, item in enumerate(contexts, start=1):
+        # Preserve source numbers so the judge can compare claims against each chunk.
         context_lines.append(f"[source {idx}]")
         context_lines.append(f"title: {item.get('title', '')}")
         context_lines.append(f"url: {item.get('url', '')}")
         context_lines.append(f"content: {item.get('text', '')}")
     context_block = "\n".join(context_lines)
 
+    # The judge prompt asks for a simple 0-2 score to keep evaluation easy to aggregate.
     judge_prompt = f"""
 You are an evaluator for fashion question answering grounding.
 
@@ -224,6 +243,7 @@ Answer:
         ],
         temperature=0,
     )
+    # The judge is instructed to return JSON only, so parse the score directly.
     parsed = json.loads(response.choices[0].message.content.strip())
     return int(parsed["score"])
 
@@ -236,6 +256,9 @@ def evaluate_case(
     client: OpenAI,
     retrieval_strategy: str,
 ) -> dict:
+    """Run retrieval, answer generation, judging, and metric scoring for one case."""
+
+    # Retrieve candidate article chunks and keep the scope decision for the prompt.
     contexts, scope_decision = query_answer.retrieve(
         question=question,
         top_k=top_k,
@@ -243,18 +266,22 @@ def evaluate_case(
         return_scope_decision=True,
         retrieval_strategy=retrieval_strategy,
     )
+    # Build the same grounded prompt used by the QA pipeline.
     prompt = query_answer.llm_prompt(
         question=question,
         contexts=contexts,
         detected_scopes=scope_decision.get("top_scopes", []),
     )
+    # Generate the answer being evaluated.
     answer = query_answer.generate_answer(prompt, source_count=len(contexts))
+    # Faithfulness is evaluated separately by a judge model using retrieved context only.
     judge_score = judge_support_score(
         question=question,
         contexts=contexts,
         answer=answer,
         client=client,
     )
+    # Retrieval metrics compare returned scopes with the expected scopes for the test case.
     recall_at_k = score_scope_recall_at_k(
         contexts=contexts,
         expected_scopes=expected_scopes,
@@ -269,6 +296,7 @@ def evaluate_case(
     )
     mode = scope_decision.get("retrieval_mode", "")
 
+    # Return compact numeric results so the summary can average across all cases.
     return {
         "case_id": case_id,
         "recall_at_k": recall_at_k,
@@ -281,7 +309,10 @@ def evaluate_case(
 
 
 def summarize_results(rows: list[dict]) -> dict:
+    """Average per-case metrics into one summary dictionary."""
+
     n = len(rows)
+    # Each metric is macro-averaged so every test case contributes equally.
     avg_recall_at_k = sum(r["recall_at_k"] for r in rows) / n
     avg_precision_at_k = sum(r["precision_at_k"] for r in rows) / n
     avg_mrr = sum(r["mrr"] for r in rows) / n
@@ -298,6 +329,8 @@ def summarize_results(rows: list[dict]) -> dict:
 
 
 def print_summary_table(summary: dict) -> None:
+    """Print a small markdown-style table with the final evaluation scores."""
+
     print("\nsummary")
     print(f"| number_of_cases      | {summary['number_of_cases']:<7} |")
     print(f"| top_k                | {summary['top_k']:<7} |")
@@ -309,11 +342,14 @@ def print_summary_table(summary: dict) -> None:
 
 
 def main() -> None:
+    """Run the full QA evaluation suite and print per-case plus summary results."""
+
     db_path = build_db_path()
     client = OpenAI()
     rows = []
 
     for case_id, case in enumerate(test_cases, start=1):
+        # Evaluate each question independently so failures are easy to locate by case id.
         row = evaluate_case(
             case_id=case_id,
             question=case["question"],
@@ -323,6 +359,7 @@ def main() -> None:
             retrieval_strategy=retrieval_strategy,
         )
         rows.append(row)
+        # Print a one-line progress report for quick terminal inspection.
         print(
             f"case {row['case_id']:02d} | recall@{top_k}: {row['recall_at_k']:.2f} | "
             f"precision@{top_k}: {row['precision_at_k']:.2f} | rr: {row['mrr']:.2f} | "
@@ -330,6 +367,7 @@ def main() -> None:
         )
 
     summary = summarize_results(rows)
+    # After all cases run, show the aggregate scores used in the evaluation report.
     print_summary_table(summary)
 
 
